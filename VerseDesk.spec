@@ -10,8 +10,12 @@ a = Analysis(
     ["run_versedesk.py"],
     pathex=[],
     binaries=[],
-    datas=[("versedesk/data/verses.json", "versedesk/data")],
-    hiddenimports=[],
+    datas=[
+        ("versedesk/data/verses.json", "versedesk/data"),
+        ("versedesk/data/bsb.txt.xz", "versedesk/data"),  # the whole BSB, for the verse list editor
+        ("versedesk/data/psalm_titles.json", "versedesk/data"),
+    ],
+    hiddenimports=["lzma", "_lzma"],  # imported by versedesk.bible (loaded only when the editor opens)
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter", "pytest", "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick"],

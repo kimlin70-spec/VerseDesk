@@ -1,6 +1,6 @@
 """Where VerseDesk keeps its files.
 
-Windows:  %APPDATA%\\VerseDesk\\settings.json, log.txt, verses.json (optional user overrides)
+Windows:  %APPDATA%\\VerseDesk\\settings.json, log.txt, verses.json (the user's verse list, if saved)
 Elsewhere (development only): ~/.config/VerseDesk/...
 The VERSEDESK_HOME environment variable overrides the folder (used by tests and CI).
 """
@@ -45,6 +45,14 @@ def user_verses_path() -> Path:
 
 def embedded_verses_path() -> Path:
     return PACKAGE_DIR / "data" / "verses.json"
+
+
+def embedded_bible_path() -> Path:
+    return PACKAGE_DIR / "data" / "bsb.txt.xz"
+
+
+def embedded_psalm_titles_path() -> Path:
+    return PACKAGE_DIR / "data" / "psalm_titles.json"
 
 
 def asset_path(name: str) -> Path:

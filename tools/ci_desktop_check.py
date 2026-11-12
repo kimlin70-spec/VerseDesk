@@ -25,7 +25,10 @@ the user cannot easily test one by one:
     minimised) and during Show desktop, must not reach the app (it logs any that do);
   * folder zones: styles, every pixel takes the mouse, a real OLE drag offering
     Copy|Move|Link is taken as a LINK and the original stays, 구역에서 빼기 via the
-    right-click menu, double-click opens a folder in Explorer, collapse/expand is saved.
+    right-click menu, double-click opens a folder in Explorer, collapse/expand is saved;
+  * the verse list editor (말씀 목록 편집) is a normal window; a reference typed with
+    real keyboard input ("요 8:12" + Enter) is looked up in the built-in BSB and saved to
+    verses.json; closing the window leaves the app running.
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -98,6 +101,48 @@ MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
 SW_MINIMIZE = 6
 WHITE_DESKTOP = (255, 255, 255)
 STRAY_CLICK_TEXT = "reached the verse window although clicks should pass through"
+
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD),
+                ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [("dx", wintypes.LONG), ("dy", wintypes.LONG), ("mouseData", wintypes.DWORD),
+                ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ctypes.c_size_t)]
+
+
+class _INPUTUNION(ctypes.Union):
+    _fields_ = [("ki", KEYBDINPUT), ("mi", MOUSEINPUT)]
+
+
+class INPUT(ctypes.Structure):
+    _fields_ = [("type", wintypes.DWORD), ("u", _INPUTUNION)]
+
+
+user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+user32.ClientToScreen.restype = wintypes.BOOL
+user32.SendInput.restype = wintypes.UINT
+INPUT_KEYBOARD, KEYEVENTF_UNICODE, VK_RETURN = 1, 0x0004, 0x0D
+
+
+def type_text(text: str) -> int:
+    """Type ``text`` as real keyboard input (Unicode packets, so Korean needs no IME)."""
+    sent = 0
+    for ch in text:
+        for flags in (KEYEVENTF_UNICODE, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP):
+            inp = INPUT(type=INPUT_KEYBOARD)
+            inp.u.ki = KEYBDINPUT(0, ord(ch), flags, 0, 0)
+            sent += user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+        time.sleep(0.03)
+    return sent
+
+
+def press_key(vk: int) -> None:
+    user32.keybd_event(vk, 0, 0, 0)
+    user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
 
 def top_level_windows() -> list[int]:
@@ -632,6 +677,83 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
         expect("zones: the app quits cleanly", code == 0, f"exit code {code}")
 
 
+# ----------------------------------------------------------------------------- verse list editor
+
+EDITOR_TITLE = "VerseDesk 말씀 목록"
+EDITOR_TYPED = "요 8:12"  # John 8:12: not in the built-in list, typed in Korean
+EDITOR_EXPECT = "John 8:12 (BSB)"
+
+
+def saved_verse_list(appdata: Path) -> list:
+    try:
+        return json.loads((appdata / "verses.json").read_text(encoding="utf-8")).get("verses", [])
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def check_verse_editor(exe: Path, appdata: Path, report: Path) -> None:
+    """말씀 목록 편집: a normal window; typing a reference + Enter saves the BSB text to verses.json
+    (the whole Bible is built into the exe); closing it leaves the app running.
+    (--open-verse-editor opens it as if chosen in the tray, which cannot be driven here.)"""
+    from versedesk.bible import Bible
+    from versedesk.verses import load_builtin
+    from versedesk import paths as vd_paths
+
+    builtin = load_builtin(vd_paths.embedded_verses_path())
+    expected = Bible.load().lookup(EDITOR_TYPED)
+    if any(v.reference == EDITOR_EXPECT for v in builtin):
+        record("verse editor: test reference is new", "FAIL", f"{EDITOR_EXPECT} is already in the built-in list")
+        return
+    (appdata / "verses.json").unlink(missing_ok=True)
+    proc = subprocess.Popen([str(exe), "--open-verse-editor", "--exit-after", "60"])
+    try:
+        editor = find_window(EDITOR_TITLE, 60)
+        if not expect("verse editor: the window opens", bool(editor)):
+            return
+        time.sleep(2)
+        ex = api.ex_style(editor)
+        expect("verse editor: a normal window (taskbar, Alt+Tab), unlike the desktop widgets",
+               bool(api.IsWindowVisible(editor)) and not ex & (api.WS_EX_TOOLWINDOW | api.WS_EX_NOACTIVATE)
+               and not ex & api.WS_EX_TOPMOST, flags_text(ex))
+        fg = api.h(api.GetForegroundWindow())
+        expect("verse editor: comes to the front when opened", fg == editor, f"foreground={api.describe(fg)}",
+               warn_only=True)
+        verse = find_window(VERSE_TITLE, 5)
+        if verse:
+            expect("verse editor: the verse stays on the desktop under it", check_placement(verse, find_desktop_host())[0])
+        minimize_consoles()
+        user32.SetForegroundWindow(editor)
+        time.sleep(0.5)
+        # click into the reference box (top row of the window) so the keys surely land there
+        point = wintypes.POINT(0, 0)
+        user32.ClientToScreen(editor, ctypes.byref(point))
+        click(point.x + 300, point.y + 22)
+        time.sleep(0.5)
+        sent = type_text(EDITOR_TYPED)
+        press_key(VK_RETURN)
+        saved = wait_for(lambda: saved_verse_list(appdata) or None, timeout=10) or []
+        screenshot(report, "07-verse-editor")
+        last = saved[-1] if saved else {}
+        expect("verse editor: a typed reference is looked up in the built-in BSB and saved",
+               last.get("reference") == expected.reference and last.get("text") == expected.text,
+               f"typed {EDITOR_TYPED!r} ({sent} key events): saved {len(saved)} verses, last={last}")
+        expect("verse editor: the rest of the list is kept, in order",
+               [v.get("reference") for v in saved[:-1]] == [v.reference for v in builtin],
+               f"{len(saved)} saved, {len(builtin)} built in")
+        user32.PostMessageW(editor, 0x0010, 0, 0)  # WM_CLOSE: like the window's X button
+        closed = wait_for(lambda: not api.IsWindow(editor) or not api.IsWindowVisible(editor), timeout=10)
+        expect("verse editor: closes with its X button", bool(closed))
+        time.sleep(2)
+        expect("verse editor: closing it leaves VerseDesk running", proc.poll() is None)
+    finally:
+        try:
+            code = proc.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            code = None
+        expect("verse editor: the app quits cleanly", code == 0, f"exit code {code}")
+
+
 def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
 
@@ -952,6 +1074,9 @@ def run(exe: Path, report: Path) -> None:
 
     # 폴더 구역 (folder zones).
     check_zones(exe, appdata, report)
+
+    # 말씀 목록 편집 (verse list editor).
+    check_verse_editor(exe, appdata, report)
 
     log = appdata / "log.txt"
     if log.exists():

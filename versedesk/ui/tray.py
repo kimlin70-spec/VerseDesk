@@ -17,7 +17,7 @@ TEXT_ADD_ZONE_LATER = "새 구역 추가 (다음 단계에서 제공)"
 TEXT_AUTOSTART = "Windows 시작 시 자동 실행"
 TEXT_AUTOSTART_DEV = "Windows 시작 시 자동 실행 (exe에서만 가능)"
 TEXT_OPEN_FOLDER = "설정·로그 폴더 열기"
-TEXT_EXPORT_VERSES = "구절 목록 파일 만들기 (편집용)"
+TEXT_EDIT_VERSES = "말씀 목록 편집…"
 TEXT_QUIT = "종료"
 
 
@@ -26,7 +26,7 @@ class TrayController(QObject):
     add_zone_requested = Signal()
     autostart_toggled = Signal(bool)
     open_folder_requested = Signal()
-    export_verses_requested = Signal()
+    edit_verses_requested = Signal()
     quit_requested = Signal()
 
     def __init__(self, icon: QIcon, autostart_supported: bool, zones_available: bool = False, parent=None):
@@ -44,16 +44,16 @@ class TrayController(QObject):
         self.act_zone.triggered.connect(self.add_zone_requested.emit)
         self.menu.addAction(self.act_zone)
 
+        self.act_verses = QAction(TEXT_EDIT_VERSES, self.menu)
+        self.act_verses.triggered.connect(self.edit_verses_requested.emit)
+        self.menu.addAction(self.act_verses)
+
         self.menu.addSeparator()
         self.act_autostart = QAction(TEXT_AUTOSTART if autostart_supported else TEXT_AUTOSTART_DEV, self.menu)
         self.act_autostart.setCheckable(True)
         self.act_autostart.setEnabled(autostart_supported)
         self.act_autostart.triggered.connect(lambda checked: self.autostart_toggled.emit(bool(checked)))
         self.menu.addAction(self.act_autostart)
-
-        self.act_export = QAction(TEXT_EXPORT_VERSES, self.menu)
-        self.act_export.triggered.connect(self.export_verses_requested.emit)
-        self.menu.addAction(self.act_export)
 
         self.act_folder = QAction(TEXT_OPEN_FOLDER, self.menu)
         self.act_folder.triggered.connect(self.open_folder_requested.emit)

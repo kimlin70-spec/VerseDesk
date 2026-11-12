@@ -1,4 +1,4 @@
-"""Wires everything together: settings, verses, the verse widget, the tray, timers."""
+"""Wires everything together: settings, the verse list, the verse widget, the tray, timers."""
 
 from __future__ import annotations
 
@@ -17,14 +17,14 @@ from PySide6.QtWidgets import QApplication
 
 from versedesk import paths
 from versedesk.autostart import Autostart
-from versedesk.daywatch import DayWatcher
 from versedesk.desktop_layer import create_desktop_layer
 from versedesk.geometry import Rect, place_on_screens, top_right
-from versedesk.settings import LoadResult, SettingsStore
+from versedesk.rotation import RotationClock, interval_label, verse_index
+from versedesk.settings import LoadResult, SettingsStore, atomic_write_text
 from versedesk.ui.icon import app_icon
 from versedesk.ui.tray import TrayController
 from versedesk.ui.verse_widget import VerseAppearance, VerseWidget
-from versedesk.verses import Verse, VerseLibrary, date_key, export_document, load_embedded, load_verse_file
+from versedesk.verses import FALLBACK, Verse, list_document, load_builtin, load_verse_file
 from versedesk.version import version_string
 from versedesk.zone_manager import ZoneManager
 
@@ -76,7 +76,7 @@ class VerseDeskApp(QObject):
         load_result: LoadResult,
         *,
         autostart: Autostart | None = None,
-        today: Callable[[], _dt.date] = _dt.date.today,
+        now: Callable[[], _dt.datetime] = _dt.datetime.now,
         user_verses_path: Path | None = None,
         embedded_verses_path: Path | None = None,
     ):
@@ -84,21 +84,23 @@ class VerseDeskApp(QObject):
         self.qapp = qapp
         self.store = store
         self.first_run = load_result.first_run
-        self._today = today
+        self._now = now
         self.autostart = autostart or Autostart.for_this_process()
         self.user_verses_path = user_verses_path or paths.user_verses_path()
         self.edit_mode = False
         self._quitting = False
 
-        # verses
-        embedded = load_embedded(embedded_verses_path or paths.embedded_verses_path())
-        self.library = VerseLibrary(embedded)
-        missing = self.library.missing_embedded_dates()
-        if missing:
-            log.error("embedded verse data is missing %d dates (e.g. %s)", len(missing), missing[:5])
+        # verses: the user's own list (verses.json) when there is one, else the built-in list
+        self.builtin = load_builtin(embedded_verses_path or paths.embedded_verses_path())
+        if not self.builtin:
+            log.error("the built-in verse list is empty")
+        self.user_list: list[Verse] | None = None
         self._verses_sig: tuple[int, int] | None = None
         self._verses_error_sig: tuple[int, int] | None = None
+        self._dated_file_kept = False  # an old one-verse-per-date verses.json could not be moved aside
         self.current_verse: Verse | None = None
+        self.current_index = 0
+        self._editor = None
 
         # widgets
         self.layer = create_desktop_layer(store.settings.desktop_mode, parent=self)
@@ -115,7 +117,7 @@ class VerseDeskApp(QObject):
         self.tray.edit_mode_toggled.connect(self.set_edit_mode)
         self.tray.autostart_toggled.connect(self.set_autostart)
         self.tray.open_folder_requested.connect(self.open_data_folder)
-        self.tray.export_verses_requested.connect(self.export_verses)
+        self.tray.edit_verses_requested.connect(self.open_verse_editor)
         self.tray.quit_requested.connect(self.quit)
 
         # folder zones
@@ -130,7 +132,7 @@ class VerseDeskApp(QObject):
         self.tray.add_zone_requested.connect(self._add_zone)
 
         # timers
-        self.day_watch = DayWatcher(self._on_date_changed, today=today)
+        self.rotation = RotationClock(self._on_rotation, store.settings.verse.interval_minutes, now=now)
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_FILES_MS)
         self._poll.timeout.connect(self._poll_files)
@@ -163,7 +165,7 @@ class VerseDeskApp(QObject):
         log.info("starting VerseDesk %s", version_string())
         self.tray.show()  # first, so notifications raised during startup are not dropped
         self._load_user_verses(initial=True)
-        self._show_verse_for(self._today())
+        self._show_current()
 
         effective = self.autostart.sync_at_startup(self.store.settings.autostart)
         self.tray.set_autostart_checked(effective)
@@ -176,14 +178,14 @@ class VerseDeskApp(QObject):
         self.zones.start()
         self.layer.start()
 
-        self.day_watch.start()
+        self.rotation.start()
         self._poll.start()
         self._connect_screens()
 
         if self.first_run:
             self.tray.notify(
                 "VerseDesk가 실행되었습니다",
-                "바탕화면 오른쪽 위에 오늘의 말씀이 표시됩니다. 이 트레이 아이콘을 누르면 메뉴가 열립니다.",
+                "바탕화면 오른쪽 위에 말씀이 표시되고 차례대로 바뀝니다. 이 트레이 아이콘을 누르면 메뉴가 열립니다.",
             )
         elif self._startup_notice:
             self.tray.notify("VerseDesk", self._startup_notice, warning=True)
@@ -195,8 +197,10 @@ class VerseDeskApp(QObject):
             return
         self._quitting = True
         log.info("quitting")
-        self.day_watch.stop()
+        self.rotation.stop()
         self._poll.stop()
+        if self._editor is not None:
+            self._editor.close()
         self.layer.stop()
         self.zones.stop()
         self.tray.hide()
@@ -221,50 +225,160 @@ class VerseDeskApp(QObject):
 
     # ------------------------------------------------------------------ verses
 
+    def active_verses(self) -> list[Verse]:
+        """What rotates on the desktop: the user's list, or the built-in one while the user
+        has no list (or emptied it)."""
+        return self.user_list or self.builtin or [FALLBACK]
+
     @safe
     def _load_user_verses(self, initial: bool = False) -> bool:
-        """(Re)load %APPDATA%\\VerseDesk\\verses.json. Returns True if the overrides changed."""
+        """(Re)load %APPDATA%\\VerseDesk\\verses.json. Returns True if the list changed."""
         sig = _file_sig(self.user_verses_path)
         if not initial and sig == self._verses_sig:
             return False
         self._verses_sig = sig
         if sig is None:
-            if self.library.overrides:
-                log.info("user verses.json removed; using the built-in verses")
-                self.library = self.library.with_overrides({})
+            self._dated_file_kept = False
+            if self.user_list is not None:
+                log.info("user verses.json removed; using the built-in list")
+                self.user_list = None
                 return True
             return False
-        entries, warnings, error = load_verse_file(self.user_verses_path, "user")
-        if error:
-            log.error("user verses: %s", error)
+        result = load_verse_file(self.user_verses_path, "user")
+        if result.dated:
+            self._retire_dated_file()
+            changed, self.user_list = self.user_list is not None, None
+            return changed
+        if result.error:
+            log.error("user verses: %s", result.error)
             if sig != self._verses_error_sig:
                 self._verses_error_sig = sig
                 self.tray.notify(
                     "verses.json 형식 오류",
-                    f"{error}\n고칠 때까지 내장 구절을 사용합니다.",
+                    f"{result.error}\n고칠 때까지 이전 목록을 그대로 사용합니다.",
                     warning=True,
                 )
             return False
         self._verses_error_sig = None
-        for w in warnings:
+        self._dated_file_kept = False
+        for w in result.warnings:
             log.warning("user verses: %s", w)
-        if warnings and not initial:
-            self.tray.notify("verses.json", f"{len(warnings)}개 항목을 건너뛰었습니다. log.txt에 이유가 있습니다.", warning=True)
-        log.info("user verses.json: %d dates override the built-in verses", len(entries))
-        self.library = self.library.with_overrides(entries)
+        if result.warnings and not initial:
+            self.tray.notify("verses.json", f"{len(result.warnings)}개 항목을 건너뛰었습니다. log.txt에 이유가 있습니다.",
+                             warning=True)
+        log.info("user verse list: %d verses", len(result.verses))
+        self.user_list = result.verses
         return True
 
-    def _show_verse_for(self, day: _dt.date) -> None:
-        verse = self.library.verse_for(day)
-        self.current_verse = verse
+    def _retire_dated_file(self) -> None:
+        """An older VerseDesk kept one verse per calendar day in verses.json. That file is not
+        a list: move it aside (never delete it) so the user's new list can take its place."""
+        backup = self.user_verses_path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json")
+        try:
+            self.user_verses_path.rename(backup)
+        except OSError as e:
+            if not self._dated_file_kept:
+                log.warning("old date-based verses.json could not be moved aside (%s); it is not used", e)
+            self._dated_file_kept = True
+            return
+        self._verses_sig = None
+        self._dated_file_kept = False
+        log.info("old date-based verses.json moved to %s; it is no longer used", backup.name)
+        self.tray.notify(
+            "말씀 목록",
+            f"예전 날짜별 목록(verses.json)은 이제 쓰지 않아 {backup.name}(으)로 보관했습니다. "
+            "트레이 메뉴 '말씀 목록 편집'에서 내 목록을 만들 수 있습니다.",
+        )
+
+    def _show_current(self, *, force: bool = False) -> None:
+        verses = self.active_verses()
+        interval = self.store.settings.verse.interval_minutes
+        index = verse_index(self._now(), interval, len(verses))
+        verse = verses[index]
+        if not force and verse == self.current_verse and index == self.current_index:
+            return
+        self.current_verse, self.current_index = verse, index
         self.verse_widget.set_verse(verse.text, verse.reference)
-        self.tray.set_tooltip(f"VerseDesk — {verse.reference or '오늘의 말씀'}")
-        log.info("verse for %s: %s [%s]", date_key(day), verse.reference or "(no reference)", verse.source)
+        self.tray.set_tooltip(f"VerseDesk — {verse.reference or '말씀'}")
+        self._position_verse()
+        log.info("verse %d/%d (%s): %s [%s]", index + 1, len(verses), interval_label(interval),
+                 verse.reference or "(no reference)", verse.source)
 
     @safe
-    def _on_date_changed(self, day: _dt.date) -> None:
-        self._show_verse_for(day)
-        self._position_verse()
+    def _on_rotation(self) -> None:
+        self._show_current()
+
+    # ------------------------------------------------------------------ verse list editor
+
+    @safe
+    def open_verse_editor(self) -> None:
+        if self._editor is not None:
+            self._editor.present()
+            return
+        from versedesk.ui.verse_editor import VerseEditor
+
+        using_builtin = self.user_list is None
+        editor = VerseEditor(
+            list(self.builtin if using_builtin else self.user_list),
+            self.store.settings.verse.interval_minutes,
+            using_builtin=using_builtin,
+            icon=app_icon(),
+        )
+        editor.list_changed.connect(self._on_editor_list)
+        editor.interval_changed.connect(self._on_editor_interval)
+        editor.closed.connect(self._on_editor_closed)
+        self._editor = editor
+        editor.present()
+        log.info("verse list editor opened")
+
+    @safe
+    def _on_editor_closed(self, *_args) -> None:
+        self._editor = None
+        log.info("verse list editor closed")
+
+    @safe
+    def _on_editor_list(self, verses: list) -> None:
+        ok = self.save_user_list(verses)
+        if self._editor is not None:
+            self._editor.set_save_result(ok)
+
+    def save_user_list(self, verses: list[Verse]) -> bool:
+        """Write the user's list to verses.json and show it right away."""
+        path = self.user_verses_path
+        verses = [Verse(v.reference, v.text, "user") for v in verses]
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if self._dated_file_kept and path.exists():  # keep the old file, never overwrite it
+                import shutil
+
+                shutil.copy2(path, path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json"))
+                self._dated_file_kept = False
+            atomic_write_text(path, list_document(verses))
+        except OSError:
+            log.exception("could not save the verse list")
+            self.tray.notify("말씀 목록", "목록을 저장하지 못했습니다. log.txt를 확인해 주세요.", warning=True)
+            return False
+        self._verses_sig = _file_sig(path)
+        self._verses_error_sig = None
+        self.user_list = verses
+        log.info("verse list saved: %d verses", len(verses))
+        self._show_current()
+        return True
+
+    @safe
+    def _on_editor_interval(self, minutes: int) -> None:
+        def mutate(s):
+            s.verse.interval_minutes = minutes
+
+        self._apply_reload(self.store.update(mutate))
+        self._apply_interval()
+
+    def _apply_interval(self) -> None:
+        minutes = self.store.settings.verse.interval_minutes
+        if minutes != self.rotation.interval:
+            log.info("the verse now changes %s", interval_label(minutes))
+            self.rotation.set_interval(minutes)
+            self._show_current()
 
     # ------------------------------------------------------------------ positioning
 
@@ -382,41 +496,6 @@ class VerseDeskApp(QObject):
             self.tray.notify("자동 실행", "자동 실행 설정을 바꾸지 못했습니다. log.txt를 확인해 주세요.", warning=True)
 
     @safe
-    def export_verses(self) -> None:
-        """Write all 366 days (the user's entries where they exist, else the built-in ones) to
-        %APPDATA%\\VerseDesk\\verses.json for editing, keeping a copy of any existing file."""
-        import shutil
-
-        from versedesk.settings import atomic_write_text
-
-        path = self.user_verses_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        backup = None
-        if path.exists():
-            backup = path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json")
-            shutil.copy2(path, backup)
-        atomic_write_text(path, export_document(self.library))
-        log.info("exported the verse list to %s (previous file kept as %s)", path, backup)
-        self.tray.notify(
-            "구절 목록 파일을 만들었습니다",
-            "메모장에서 원하는 날짜를 고치고 저장(Ctrl+S)하면 바로 반영됩니다."
-            + (f"\n이전 파일은 {backup.name}으로 보관했습니다." if backup else ""),
-        )
-        self._open_in_editor(path)
-
-    def _open_in_editor(self, path: Path) -> None:
-        if sys.platform == "win32":
-            import subprocess
-
-            from versedesk.win32 import shell as win_shell
-
-            win_shell.allow_foreground()
-            with win_shell.clean_launch_environment():
-                subprocess.Popen(["notepad.exe", str(path)])
-        else:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-
-    @safe
     def open_data_folder(self) -> None:
         folder = paths.app_data_dir()
         folder.mkdir(parents=True, exist_ok=True)
@@ -431,8 +510,10 @@ class VerseDeskApp(QObject):
     def _poll_files(self) -> None:
         self._apply_reload(self.store.poll())
         if self._load_user_verses():
-            self._show_verse_for(self.day_watch.current)
-            self._position_verse()
+            self._show_current(force=True)
+            if self._editor is not None:  # edited outside while the editor is open
+                using_builtin = self.user_list is None
+                self._editor.set_list(list(self.builtin if using_builtin else self.user_list), using_builtin)
 
     def _apply_reload(self, result: LoadResult | None) -> None:
         """React to settings.json having been edited outside the app."""
@@ -457,6 +538,7 @@ class VerseDeskApp(QObject):
         log.info("settings.json changed outside the app; applying it")
         self.verse_widget.set_appearance(VerseAppearance.from_settings(s.verse))
         self._position_verse()
+        self._apply_interval()
         if s.desktop_mode != self.layer.mode:
             log.info("desktop_mode=%s takes effect after a restart", s.desktop_mode)
         if self.autostart.supported and s.autostart != self.autostart.is_enabled():

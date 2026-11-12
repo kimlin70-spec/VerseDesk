@@ -1,0 +1,44 @@
+# VerseDesk built-in verse list: shown in this order, one after another.
+# One reference per line ("Book C:V" or "Book C:V-W", book names as in bsb.txt).
+# The text is never typed here: tools/build_verses.py copies it from the official bsb.txt.
+# After editing: python3 -I tools/build_verses.py   (first: python3 -I tools/bsb.py download)
+John 3:16
+Psalm 23:1-3
+Philippians 4:6-7
+Proverbs 3:5-6
+Matthew 11:28-30
+Isaiah 40:31
+Romans 8:28
+Jeremiah 29:11
+2 Corinthians 5:17
+Lamentations 3:22-23
+John 14:27
+Joshua 1:9
+Galatians 2:20
+Psalm 46:10
+1 Corinthians 13:13
+Isaiah 41:10
+Matthew 6:33
+Psalm 119:105
+Romans 12:2
+Micah 6:8
+Ephesians 2:8-9
+Psalm 37:4-5
+Hebrews 11:1
+Isaiah 26:3
+1 John 4:18
+Psalm 121:1-2
+John 15:5
+Zephaniah 3:17
+Philippians 4:13
+Psalm 27:1
+1 Peter 5:7
+Numbers 6:24-26
+Galatians 5:22-23
+Psalm 139:23-24
+Romans 15:13
+Psalm 16:11
+1 Thessalonians 5:16-18
+Deuteronomy 31:8
+2 Timothy 1:7
+Revelation 21:4

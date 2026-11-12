@@ -22,6 +22,9 @@
 - 오류는 %APPDATA%\VerseDesk\log.txt에 기록하고 프로그램은 꺼지지 않게. 상주 프로그램이니 가볍게
 
 ## 기능 1: 오늘의 말씀
+> **2026-11-12 사용자 결정으로 바뀜 (아래 진행 상황 ③):** 날짜별 366구절 → 사용자가 직접 고르는 30~50개 목록을
+> **차례대로, 하루 여러 번** 표시(기본 2시간마다) + 말씀 넣는 창(트레이 '말씀 목록 편집'). 이 절의 "날짜별 고정",
+> "날짜가 바뀌면 교체", "verses.json 날짜 덮어쓰기" 항목은 이 결정으로 대체됨. ("설정 화면(GUI)" 보류 중 이 편집 창만 예외.)
 - 영어 본문만 표시 + 출처(예: John 3:16 (BSB)). 기본 글꼴 Georgia, 어떤 배경화면에서도 읽히게(흰 글씨+그림자 등), 긴 구절은 줄바꿈
 - 날짜별 고정: 1/1~12/31(2/29 포함) 366구절, 매년 같은 날짜엔 같은 구절
 - 프로그램 시작 시, 그리고 날짜가 바뀌면(자정, 절전 복귀 포함) 자동 교체
@@ -60,7 +63,7 @@
 ## 진행 상황 (Claude가 세션마다 갱신)
 - [완료, 사용자 확인 대기] ① 말씀 위젯 + 트레이 + 자동 실행 + 빌드 (브랜치 `claude/keen-hopper-d9tmyw`, main 미반영)
   - 사용자가 README "1단계 확인 체크리스트"로 윈도우에서 확인 → 문제 있으면 log.txt 받아서 수정
-  - CI가 실제 윈도우 바탕화면 두 종류에서 매 push 점검(아래 "검증된 사실"). 구절 366일은 편집 검토(38개 교체)와 계절 배치까지 끝남.
+  - CI가 실제 윈도우 바탕화면 두 종류에서 매 push 점검(아래 "검증된 사실"). (구절 366일 날짜 방식은 ③에서 차례대로 도는 목록으로 바뀜.)
   - main 반영(PR/병합)은 사용자가 요청할 때만. 반영되면 Release `build-N`과 고정 링크 .../releases/latest/download/VerseDesk.exe 생김.
 - ① 사용자 확인 결과(2026-11-12): Alt+Tab/작업표시줄 없음, Win+D, 배치 편집, 중복 실행 안내, 모니터 2대·다른 배율 모두 OK.
   재부팅 자동 실행은 나중에 확인 예정. **"말씀 위 바탕화면 아이콘 클릭 안 됨"** 보고 → CI(평소 상태+Win+D, 실제 마우스 클릭,
@@ -91,10 +94,31 @@
     PATH에서 sys._MEIPASS 제거, QT_PLUGIN_PATH/QML2_IMPORT_PATH 제거 후 실행하고 복원.
   - 확인/취소 같은 대화상자 단추는 한국어로 직접 지정(번역 파일 .qm은 exe에서 뺐음).
 
+- [완료, 사용자 확인 대기] ③ 말씀 목록을 차례대로 돌리기 + 말씀 목록 편집 창 (같은 브랜치, 2026-11-12 사용자 요청)
+  - 사용자 요청 원문: "매일 말씀이 바뀔 필요 없음 … 366개 고르기 좀 그래서. 그냥 순서대로 계속 돌아가면 될 듯, 하루에도 몇번씩
+    돌아가면 좋고. 한 30~50개정도만 … 말씀 넣는 UI가 좀 개선되었으면 … 메모장에 바꿀려니까 좀 그래서 … 가장 간단하고 깔끔하고
+    가볍고 군더더기 없는 방향으로". README 6-2 체크리스트로 확인 요청.
+  - 목록: 내장 기본 40개(`tools/default_list.txt` → `versedesk/data/verses.json`). 사용자 목록 `%APPDATA%\VerseDesk\verses.json`
+    (`{"verses":[{"reference","text"}]}`)이 있고 비어 있지 않으면 내장 목록을 통째로 대신함. 비면 내장 목록 표시.
+  - 차례(`rotation.py`): 저장 상태 없음. index = (2000-01-01 00:00부터의 분 // interval) % 개수 (현지 벽시계 기준) → 재시작·절전 후에도
+    순서가 이어짐. `settings.json` `verse.interval_minutes`(기본 120, 1~10080, 창에서 30분/1·2·3·6시간/하루). `RotationClock` = 다음 경계 단발 타이머 + 30초 확인.
+  - 편집 창(`ui/verse_editor.py`): 부모 없는 일반 창(작업표시줄·Alt+Tab에 보임). 주소 입력(쉼표로 여러 개) → 내장 BSB에서 본문 자동 채움,
+    2열 목록(구절|본문), ▲▼·삭제·끌어서 순서·Delete·Ctrl+↑↓, 선택 구절 전체 미리보기, 간격 선택. **바뀔 때마다 즉시 저장(저장 단추 없음)**.
+    닫으면 WA_DeleteOnClose + `closed` 신호로 앱이 참조를 버림, 성경 본문(~15MB)도 해제.
+  - 내장 성경(`bible.py`): `data/bsb.txt.xz` = 공식 bsb.txt 바이트 그대로 LZMA(974KB; 테스트가 SHA-256을 오프라인으로 확인),
+    `data/psalm_titles.json` = USFM `\d` 표제 116개(1절 앞에서 떼어 냄, 빌드 도구와 같은 규칙). 편집 창이 처음 찾을 때만 읽음(~0.1초).
+    주소 해석: 개역개정 이름·약자 + 새번역·가톨릭(2005) 이름 + 영어 이름·약자, 한 장 안 10절까지, 단권(옵·몬·요이·요삼·유)은 "유 24"처럼 절만.
+    BSB에서 빠진 절(예: 마 17:21)은 건너뜀/오류 안내. 표시 출처 "Book C:V–W (BSB)"(엔 대시).
+  - 예전 날짜형 verses.json(이전 내보내기 기능)은 시작 때 `verses.backup-<시각>.json`으로 이름만 바꿔 보관(삭제 안 함) + 트레이 알림.
+    이름 바꾸기에 실패하면 쓰지 않고 두었다가 첫 저장 때 복사본을 만든 뒤 덮어씀.
+  - 없앤 것: `daywatch.py`, `tools/seasonal.py`, `tools/verse_plan.tsv`, 메모장 내보내기(구절 목록 파일 만들기). 366일 계획은 커밋 22f06eb까지의 git 기록에 있음.
+  - CI: 숨은 옵션 `--open-verse-editor`(트레이 대신 창 열기). `check_verse_editor`가 실제 키보드 입력(SendInput 유니코드)으로 "요 8:12"+Enter →
+    verses.json에 BSB 본문 저장 확인, 창 닫아도 앱 유지, 일반 창 스타일 확인.
+
 ## 개발 메모 (다음 세션용)
 
 ### 구조와 원칙
-- 파일 지도는 README "개발자용 메모" 참고. 말씀(`verses.py`)·설정(`settings.py`)·화면배치(`geometry.py`)는 Qt 없는 순수 로직 → `tests/`에서 리눅스로 테스트.
+- 파일 지도는 README "개발자용 메모" 참고. 말씀 목록(`verses.py`)·성경 조회(`bible.py`)·차례 계산(`rotation.py`의 순수 함수)·설정(`settings.py`)·화면배치(`geometry.py`)는 Qt 없는 순수 로직 → `tests/`에서 리눅스로 테스트.
 - 윈도우 전용 코드는 `versedesk/win32/`에만. 다른 OS에서는 `desktop_layer.NullDesktopLayer`가 대신함.
 - Qt 슬롯은 예외를 밖으로 던지지 않음(`app.safe` 데코레이터, excepthook → log.txt).
 - PySide6 함정: `QGraphicsEffect`를 부모 없이 만들면 파이썬 GC가 지워서 효과가 사라짐 → 부모 지정 + 참조 보관.
@@ -124,11 +148,12 @@
 ### 말씀 데이터
 - 원문: https://bereanbible.com/bsb.txt (+ 시편 표제 확인용 bsb_usfm.zip). SHA-256은 `tools/bsb.py`에 고정.
 - `python3 -I tools/bsb.py download` → `tools/.cache/`(git 제외). `python3 -I tools/bsb.py lookup "John 3:16"`으로 원문 조회.
-- `tools/verse_plan.tsv`(날짜→구절) 수정 후 `python3 -I tools/seasonal.py` → `python3 -I tools/build_verses.py`로 `versedesk/data/verses.json` 재생성.
-  본문을 손으로 쓰지 말 것. 테스트가 특별한 날(1/1, 1/2, 2/14, 2/29, 3/1, 3/20, 5/5, 5/8, 8/15, 10/31, 11/25, 12/24, 12/25, 12/31) 구절과
-  계절 배치(대림절 12월, 1/6 주현절, 3/24~4/7 고난·부활)가 유지되는지 확인함.
+- `tools/default_list.txt`(기본 목록, 30~50개, 1~3절) 수정 후 `python3 -I tools/build_verses.py` → `versedesk/data/verses.json`, `bsb.txt.xz`,
+  `psalm_titles.json` 재생성(`--check`로 확인, CI data 작업도 공식 파일로 다시 만들어 비교). 본문을 손으로 쓰지 말 것.
+  테스트(`test_embedded_data.py`)가 bsb.txt.xz의 SHA-256 = 고정값, 기본 목록 본문 = 앱의 조회 결과, 표제가 1절 앞에 있음을 오프라인으로 확인.
 - 판(edition): bsb.txt에는 판 표시가 없음. Last-Modified 2026-07-31, 공식 changelog 2026-07-31 항목까지 반영된 본문(README·verses.json source에 기록).
-  출판사는 같은 주소의 파일을 고쳐 올리므로 다시 받으면 해시가 달라질 수 있음 → 그때는 366개 구절 비교 후 SOURCES 갱신.
+  출판사는 같은 주소의 파일을 고쳐 올리므로 다시 받으면 해시가 달라질 수 있음 → 그때는 기본 목록 비교·changelog 확인 후 SOURCES 갱신,
+  bsb.txt.xz도 새 파일로 다시 만들어야 함(사용자 verses.json에 이미 들어간 본문은 그대로 남음).
 - 원문 그대로를 지킴: 다른 절에서 열린 따옴표로 끝나는 구절(끝의 ”)도 고치지 않음(바꾸면 BSB 이름을 쓰지 말라는 출판사 요청).
 
 ### 검증된 사실 (CI의 실제 윈도우 바탕화면에서 확인, 2026-11)

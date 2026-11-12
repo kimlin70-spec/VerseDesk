@@ -72,7 +72,8 @@ jobs:
           if-no-files-found: ignore
 
   data:
-    # The embedded verses must be the official BSB text, byte for byte. The publisher replaces
+    # The built-in Bible (versedesk/data/bsb.txt.xz) and verse list must be the official BSB text,
+    # byte for byte (the unit tests also check the pinned SHA-256 offline). The publisher replaces
     # its files in place, so a hash mismatch (new edition) or an outage is a warning, not a
     # failed build: the shipped data is still the pinned, verified edition.
     name: verse data equals the official BSB text
@@ -92,9 +93,9 @@ jobs:
 
       - name: Warn if the pinned edition could not be downloaded
         if: steps.download.outcome != 'success'
-        run: echo "::warning::Could not download the pinned BSB edition (site unreachable or a new edition was published). verses.json was not re-checked."
+        run: echo "::warning::Could not download the pinned BSB edition (site unreachable or a new edition was published). The verse data was not re-derived."
 
-      - name: Rebuild check (versedesk/data/verses.json from bsb.txt)
+      - name: Rebuild check (verses.json, bsb.txt.xz, psalm_titles.json from the official files)
         if: steps.download.outcome == 'success'
         run: python -I tools/build_verses.py --check
 

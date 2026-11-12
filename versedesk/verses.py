@@ -1,186 +1,142 @@
-"""Verse of the day: pick the passage for a calendar date.
+"""The verse list: which verses are shown, in which order.
 
-* The embedded file (versedesk/data/verses.json, built from the official BSB text by
-  tools/build_verses.py) has one entry for every day of a leap year: "01-01" ... "12-31",
-  including "02-29".
-* If %APPDATA%\\VerseDesk\\verses.json exists, every date it contains wins over the
-  embedded entry; dates it does not mention keep the embedded verse.
+* Built-in list: versedesk/data/verses.json (about 40 well-known passages; the text is
+  copied from the official BSB file by tools/build_verses.py, never typed by hand).
+* The user's own list: %APPDATA%\\VerseDesk\\verses.json, written by the verse list editor
+  (트레이 → 말씀 목록 편집).  When it exists it replaces the built-in list completely.
 
-Override file format (UTF-8; a bare list is also accepted):
+The verses are shown one after another in list order (see versedesk/rotation.py).
+
+File format (UTF-8; a bare list is also accepted; other keys are ignored):
 
     {"verses": [
-        {"date": "12-25", "reference": "Book 1:2 (BSB)", "text": "the verse text ..."}
+        {"reference": "John 3:16 (BSB)", "text": "For God so loved the world ..."},
+        ...
     ]}
 
-"date" accepts "12-25", "12/25", "1-5" etc.  "text" is required; "reference" may be empty.
+Earlier versions used one entry per calendar day ({"date": "12-25", ...}).  Such a file
+is reported as ``dated`` so the app can put it aside; it is never used as the list.
 Pure Python, no Qt.
 """
 
 from __future__ import annotations
 
-import datetime as _dt
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from versedesk.settings import describe_json_error, read_text_lenient
 
 log = logging.getLogger("versedesk.verses")
 
-_DATE_RE = re.compile(r"^\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*$")
 MAX_TEXT_CHARS = 2000
+MAX_REFERENCE_CHARS = 120
+MAX_VERSES = 1000  # far more than anyone rotates through; protects against absurd files
+
+FILE_NOTE = (
+    "VerseDesk 말씀 목록입니다. 트레이 메뉴 '말씀 목록 편집'에서 고치면 자동으로 저장됩니다. "
+    "위에서부터 차례대로 바탕화면에 표시됩니다. 이 파일을 지우면 기본 목록으로 돌아갑니다."
+)
 
 
 @dataclass(frozen=True)
 class Verse:
-    date: str  # "MM-DD"
-    reference: str  # e.g. "John 3:16 (BSB)"
+    reference: str  # e.g. "John 3:16 (BSB)"; may be empty
     text: str
-    source: str = "embedded"  # "embedded" | "user"
+    source: str = "embedded"  # "embedded" | "user" | "fallback"
+
+    def key(self) -> str:
+        """Two entries are the same verse when their references match, ignoring case,
+        spacing, the kind of dash and a trailing "(BSB)"; without a reference, by text."""
+        ref = re.sub(r"\s*\([^()]*\)\s*$", "", self.reference)
+        ref = re.sub(r"\s*[-~–—]\s*", "-", " ".join(ref.split())).casefold()
+        return ref or "text:" + " ".join(self.text.split()).casefold()
 
 
-def date_key(d: _dt.date) -> str:
-    return f"{d.month:02d}-{d.day:02d}"
+FALLBACK = Verse("", "(VerseDesk: verse data is missing — see log.txt)", "fallback")
 
 
-def all_date_keys() -> list[str]:
-    """All 366 keys in calendar order (uses leap year 2024)."""
-    start = _dt.date(2024, 1, 1)
-    return [date_key(start + _dt.timedelta(days=i)) for i in range(366)]
+@dataclass
+class VerseFile:
+    verses: list[Verse] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    error: str | None = None  # the whole file is unusable
+    dated: bool = False  # the old one-verse-per-calendar-day format
 
 
-def normalize_date_key(value: Any) -> str | None:
-    """'1-5', '01/05', '1.5' -> '01-05'. Returns None if not a real month/day (Feb 29 allowed)."""
+def _clean(value: Any, limit: int) -> str | None:
     if not isinstance(value, str):
         return None
-    m = _DATE_RE.match(value)
-    if not m:
-        return None
-    month, day = int(m.group(1)), int(m.group(2))
-    try:
-        _dt.date(2024, month, day)  # 2024 is a leap year, so 02-29 is valid
-    except ValueError:
-        return None
-    return f"{month:02d}-{day:02d}"
+    text = " ".join(value.split())  # no line breaks, tabs or double spaces
+    return text[:limit] if text else None
 
 
-def _clean_text(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = " ".join(value.split())  # collapse newlines/tabs/double spaces
-    if not text:
-        return None
-    return text[:MAX_TEXT_CHARS]
-
-
-def parse_entries(data: Any, source: str) -> tuple[dict[str, Verse], list[str]]:
-    """Turn parsed JSON into {date_key: Verse}. Invalid entries are skipped with a warning."""
-    warnings: list[str] = []
+def parse_list(data: Any, source: str) -> VerseFile:
+    """Parsed JSON -> the verses in order. Invalid entries are skipped with a warning."""
     if isinstance(data, dict):
         items = data.get("verses")
         if not isinstance(items, list):
-            return {}, ['expected a list under "verses"']
+            return VerseFile(error='expected a list under "verses"')
     elif isinstance(data, list):
         items = data
     else:
-        return {}, ["expected an object with a \"verses\" list"]
+        return VerseFile(error='expected an object with a "verses" list')
+    if any(isinstance(item, dict) and "date" in item for item in items):
+        return VerseFile(dated=True, error="one verse per date (format of an older VerseDesk)")
 
-    out: dict[str, Verse] = {}
+    out = VerseFile()
     for i, item in enumerate(items, start=1):
         if not isinstance(item, dict):
-            warnings.append(f"entry #{i}: not an object, skipped")
+            out.warnings.append(f"entry #{i}: not an object, skipped")
             continue
-        key = normalize_date_key(item.get("date"))
-        if key is None:
-            warnings.append(f"entry #{i}: bad or missing \"date\" {item.get('date')!r}, skipped")
-            continue
-        text = _clean_text(item.get("text"))
+        text = _clean(item.get("text"), MAX_TEXT_CHARS)
         if text is None:
-            warnings.append(f"entry #{i} ({key}): missing \"text\", skipped")
+            out.warnings.append(f"entry #{i}: missing \"text\", skipped")
             continue
-        ref = item.get("reference", "")
-        ref = " ".join(ref.split()) if isinstance(ref, str) else ""
-        if key in out:
-            warnings.append(f"entry #{i}: date {key} appears more than once; the later entry wins")
-        out[key] = Verse(key, ref, text, source)
-    return out, warnings
+        if len(out.verses) >= MAX_VERSES:
+            out.warnings.append(f"only the first {MAX_VERSES} verses are used")
+            break
+        out.verses.append(Verse(_clean(item.get("reference"), MAX_REFERENCE_CHARS) or "", text, source))
+    return out
 
 
-def load_verse_file(path: Path, source: str) -> tuple[dict[str, Verse], list[str], str | None]:
-    """Returns (entries, warnings, error). ``error`` is set when the whole file is unusable."""
+def load_verse_file(path: Path, source: str) -> VerseFile:
     try:
         text = read_text_lenient(path)
     except OSError as e:
-        return {}, [], f"{path.name}: cannot read: {e}"
+        return VerseFile(error=f"{path.name}: cannot read: {e}")
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
-        return {}, [], describe_json_error(path.name, e)
+        return VerseFile(error=describe_json_error(path.name, e))
     except (ValueError, RecursionError) as e:  # e.g. a number thousands of digits long
-        return {}, [], f"{path.name}: cannot be read ({type(e).__name__}: {e})"[:300]
+        return VerseFile(error=f"{path.name}: cannot be read ({type(e).__name__}: {e})"[:300])
     try:
-        entries, warnings = parse_entries(data, source)
+        result = parse_list(data, source)
     except Exception as e:  # an odd entry must never keep the app from starting
         log.exception("%s: unexpected content", path.name)
-        return {}, [], f"{path.name}: unexpected content ({type(e).__name__})"
-    return entries, warnings, None
+        return VerseFile(error=f"{path.name}: unexpected content ({type(e).__name__})")
+    if result.error and not result.dated:
+        result.error = f"{path.name}: {result.error}"
+    return result
 
 
-class VerseLibrary:
-    def __init__(self, embedded: dict[str, Verse], overrides: dict[str, Verse] | None = None):
-        self.embedded = dict(embedded)
-        self.overrides = dict(overrides or {})
-
-    def missing_embedded_dates(self) -> list[str]:
-        return [k for k in all_date_keys() if k not in self.embedded]
-
-    def verse_for_key(self, key: str) -> Verse:
-        v = self.overrides.get(key) or self.embedded.get(key)
-        if v is not None:
-            return v
-        # Should never happen with the shipped data; degrade gracefully instead of crashing.
-        if self.embedded:
-            log.error("no verse for %s; using the first embedded entry", key)
-            return next(iter(self.embedded.values()))
-        return Verse(key, "", "(VerseDesk: verse data is missing — see log.txt)", "fallback")
-
-    def verse_for(self, day: _dt.date) -> Verse:
-        return self.verse_for_key(date_key(day))
-
-    def with_overrides(self, overrides: dict[str, Verse]) -> "VerseLibrary":
-        return VerseLibrary(self.embedded, overrides)
+def load_builtin(path: Path) -> list[Verse]:
+    result = load_verse_file(path, "embedded")
+    if result.error:
+        log.error("built-in verse list unusable: %s", result.error)
+    for w in result.warnings:
+        log.error("built-in verse list: %s", w)
+    return result.verses
 
 
-def load_embedded(path: Path) -> dict[str, Verse]:
-    entries, warnings, error = load_verse_file(path, "embedded")
-    if error:
-        log.error("embedded verse data unusable: %s", error)
-    for w in warnings:
-        log.error("embedded verse data: %s", w)
-    return entries
-
-
-def iter_dates(start: _dt.date, days: int) -> Iterable[_dt.date]:
-    for i in range(days):
-        yield start + _dt.timedelta(days=i)
-
-
-EXPORT_NOTE = (
-    "VerseDesk 구절 목록입니다. 날짜(date)별로 출처(reference)와 본문(text)을 고치고 저장하면 "
-    "2초 안에 바탕화면에 반영됩니다. 이 파일을 지우면 프로그램에 내장된 목록으로 돌아갑니다. "
-    "본문은 직접 치지 말고 BSB 원문에서 복사해 붙여 넣으면 오타가 없습니다."
-)
-
-
-def export_document(library: VerseLibrary) -> str:
-    """All 366 days as an editable verses.json: the user's own entries where they exist,
-    otherwise the built-in ones.  Loading it back gives exactly what is shown now."""
-    verses = []
-    for key in all_date_keys():
-        v = library.verse_for_key(key)
-        verses.append({"date": key, "reference": v.reference, "text": v.text})
-    doc = {"안내": EXPORT_NOTE, "verses": verses}
+def list_document(verses: list[Verse]) -> str:
+    """The user's list as written to %APPDATA%\\VerseDesk\\verses.json."""
+    doc = {
+        "안내": FILE_NOTE,
+        "verses": [{"reference": v.reference, "text": v.text} for v in verses],
+    }
     return json.dumps(doc, ensure_ascii=False, indent=2) + "\n"

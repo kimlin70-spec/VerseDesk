@@ -19,6 +19,16 @@ def test_defaults():
     assert s.verse.font_family == "Georgia"
     assert s.verse.x is None and not s.verse.has_custom_position
     assert s.verse.effective_reference_font_size() == 13.0
+    assert s.verse.interval_minutes == 120  # the next verse every 2 hours
+
+
+def test_interval_minutes_is_checked():
+    for good, want in ((30, 30), ("60", 60), (1440, 1440), (1, 1)):
+        s, warnings = settings_from_dict({"verse": {"interval_minutes": good}})
+        assert (s.verse.interval_minutes, warnings) == (want, [])
+    for bad in (0, -5, 10081, "often", True, None, 1e400):
+        s, warnings = settings_from_dict({"verse": {"interval_minutes": bad}})
+        assert s.verse.interval_minutes == 120 and len(warnings) == 1, bad
 
 
 def test_round_trip_preserves_everything_including_unknown_keys():
@@ -28,7 +38,8 @@ def test_round_trip_preserves_everything_including_unknown_keys():
         "desktop_mode": "owner",
         "debug_log": True,
         "verse": {"x": -1200, "y": 35, "width": 600, "font_family": "Segoe UI", "font_size": 18.5,
-                  "reference_font_size": 12, "color": "#FFEEDD", "shadow": False, "align": "left"},
+                  "reference_font_size": 12, "color": "#FFEEDD", "shadow": False, "align": "left",
+                  "interval_minutes": 45},
         "zones": [{"id": "z1", "name": "Work", "x": 10, "y": 20, "width": 300, "height": 200,
                    "collapsed": True, "items": ["C:\\Docs", "\\\\server\\share\\plan.xlsx"],
                    "color": "#112233"}],

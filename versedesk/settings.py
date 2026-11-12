@@ -17,7 +17,8 @@ File layout (all keys optional; anything missing or invalid falls back to the de
         "reference_font_size": null,   # points; null = 65% of font_size
         "color": "#FFFFFF",
         "shadow": true,
-        "align": "right"               # left | center | right
+        "align": "right",              # left | center | right
+        "interval_minutes": 120        # the next verse of the list every N minutes (1440 = daily)
       },
       "zones": [ ... ]                 # folder zones, see versedesk/zones.py
     }
@@ -38,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from versedesk.rotation import DEFAULT_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES, MIN_INTERVAL_MINUTES
 from versedesk.zones import Zone, zones_from_list, zones_to_list
 
 log = logging.getLogger("versedesk.settings")
@@ -60,6 +62,7 @@ class VerseSettings:
     color: str = "#FFFFFF"
     shadow: bool = True
     align: str = "right"
+    interval_minutes: int = DEFAULT_INTERVAL_MINUTES
 
     @property
     def has_custom_position(self) -> bool:
@@ -201,6 +204,11 @@ def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Set
     take("color", lambda a: a if isinstance(a, str) and _COLOR_RE.match(a) else None, "must look like #FFFFFF")
     take("shadow", lambda a: a if isinstance(a, bool) else None, "must be true or false")
     take("align", lambda a: a if a in ALIGN_CHOICES else None, f"must be one of {ALIGN_CHOICES}")
+    take(
+        "interval_minutes",
+        lambda a: _int_in(a, MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES),
+        f"must be a number of minutes from {MIN_INTERVAL_MINUTES} to {MAX_INTERVAL_MINUTES}",
+    )
 
     if "zones" in data:
         if isinstance(data["zones"], list):
@@ -235,6 +243,7 @@ def settings_to_dict(s: Settings) -> dict[str, Any]:
             "color": vs.color,
             "shadow": vs.shadow,
             "align": vs.align,
+            "interval_minutes": vs.interval_minutes,
         },
         "zones": zones_to_list(s.zones),
     }

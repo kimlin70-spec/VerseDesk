@@ -1,164 +1,95 @@
-import datetime as dt
+"""The verse list file: reading it safely, writing it back, telling an old date file apart."""
+
 import json
 
-import pytest
-
 from versedesk.verses import (
+    MAX_VERSES,
     Verse,
-    VerseLibrary,
-    all_date_keys,
-    date_key,
+    list_document,
     load_verse_file,
-    normalize_date_key,
-    parse_entries,
+    parse_list,
 )
 
 
-def _embedded():
-    return {k: Verse(k, f"Ref {k} (BSB)", f"Text for {k}.") for k in all_date_keys()}
+def test_a_list_keeps_its_order_and_accepts_a_bare_list():
+    data = {"verses": [{"reference": "B 2:2", "text": "Second?"}, {"reference": "A 1:1", "text": "First?"}]}
+    r = parse_list(data, "user")
+    assert r.error is None and r.warnings == []
+    assert [v.reference for v in r.verses] == ["B 2:2", "A 1:1"]
+    assert [v.source for v in r.verses] == ["user", "user"]
+    assert [v.text for v in parse_list([{"text": "Only text."}], "user").verses] == ["Only text."]
 
 
-def test_all_date_keys_has_366_days_including_feb_29():
-    keys = all_date_keys()
-    assert len(keys) == 366
-    assert len(set(keys)) == 366
-    assert keys[0] == "01-01" and keys[-1] == "12-31"
-    assert "02-29" in keys
+def test_invalid_entries_are_skipped_with_warnings():
+    data = {"verses": [
+        "not an object",
+        {"reference": "No text"},
+        {"reference": "Empty", "text": "   "},
+        {"reference": 5, "text": "Bad reference is dropped,\n text kept."},
+        {"text": "x" * 5000},
+    ]}
+    r = parse_list(data, "user")
+    assert len(r.warnings) == 3 and r.error is None
+    assert r.verses[0] == Verse("", "Bad reference is dropped, text kept.", "user")
+    assert len(r.verses[1].text) == 2000
 
 
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        ("01-05", "01-05"),
-        ("1-5", "01-05"),
-        ("1/5", "01-05"),
-        ("12.25", "12-25"),
-        (" 02-29 ", "02-29"),
-        ("02-30", None),
-        ("13-01", None),
-        ("00-10", None),
-        ("2024-01-01", None),
-        ("", None),
-        (None, None),
-        (101, None),
-    ],
-)
-def test_normalize_date_key(value, expected):
-    assert normalize_date_key(value) == expected
+def test_wrong_top_level_shape_is_an_error():
+    assert parse_list({"days": []}, "user").error
+    assert parse_list("text", "user").error
 
 
-def test_same_date_same_verse_every_year():
-    lib = VerseLibrary(_embedded())
-    for year in (2025, 2026, 2027, 2030):
-        assert lib.verse_for(dt.date(year, 3, 14)).text == "Text for 03-14."
-        assert lib.verse_for(dt.date(year, 12, 31)).text == "Text for 12-31."
+def test_the_old_one_verse_per_date_format_is_recognised():
+    old = {"안내": "...", "verses": [{"date": "01-01", "reference": "R", "text": "T"}]}
+    r = parse_list(old, "user")
+    assert r.dated and r.verses == []
 
 
-def test_feb_29_used_in_leap_years_and_feb_28_29_differ():
-    lib = VerseLibrary(_embedded())
-    assert lib.verse_for(dt.date(2028, 2, 29)).date == "02-29"
-    assert lib.verse_for(dt.date(2027, 2, 28)).date == "02-28"
-    assert lib.verse_for(dt.date(2027, 3, 1)).date == "03-01"
+def test_too_many_verses_are_capped():
+    r = parse_list([{"text": f"v{i}"} for i in range(MAX_VERSES + 5)], "user")
+    assert len(r.verses) == MAX_VERSES and r.warnings
 
 
-def test_every_day_of_two_years_has_a_verse():
-    lib = VerseLibrary(_embedded())
-    day = dt.date(2027, 1, 1)
-    for _ in range(366 * 2):
-        v = lib.verse_for(day)
-        assert v.date == date_key(day)
-        day += dt.timedelta(days=1)
-
-
-def test_user_override_wins_only_for_its_dates():
-    overrides, warnings = parse_entries(
-        {"verses": [{"date": "3-14", "reference": "Mine 1:1", "text": "My  own\ntext"}]}, "user"
-    )
-    assert warnings == []
-    lib = VerseLibrary(_embedded(), overrides)
-    v = lib.verse_for(dt.date(2026, 3, 14))
-    assert (v.text, v.reference, v.source) == ("My own text", "Mine 1:1", "user")
-    assert lib.verse_for(dt.date(2026, 3, 15)).source == "embedded"
-
-
-def test_override_accepts_bare_list_and_missing_reference():
-    entries, warnings = parse_entries([{"date": "12/25", "text": "Hello"}], "user")
-    assert warnings == []
-    assert entries["12-25"].reference == ""
-
-
-def test_invalid_override_entries_are_skipped_with_warnings():
-    entries, warnings = parse_entries(
-        {
-            "verses": [
-                {"date": "02-30", "text": "bad date"},
-                {"date": "01-01"},
-                "not an object",
-                {"date": "01-02", "text": "   "},
-                {"date": "01-03", "text": "ok", "reference": 5},
-                {"date": "01-03", "text": "later wins"},
-            ]
-        },
-        "user",
-    )
-    assert set(entries) == {"01-03"}
-    assert entries["01-03"].text == "later wins"
-    assert len(warnings) == 5
-
-
-def test_wrong_top_level_shape():
-    assert parse_entries({"days": []}, "user")[0] == {}
-    assert parse_entries("text", "user")[0] == {}
-
-
-def test_load_verse_file_reports_json_errors_with_position(tmp_path):
+def test_round_trip_through_the_saved_file(tmp_path):
+    verses = [Verse("John 3:16 (BSB)", "For God so loved the world …", "user"), Verse("", "“내 묵상” 본문", "user")]
     p = tmp_path / "verses.json"
-    p.write_text('{"verses": [ {"date": "01-01", "text": "a"} ', encoding="utf-8")
-    entries, warnings, error = load_verse_file(p, "user")
-    assert entries == {} and error is not None
-    assert "line 1" in error
+    p.write_text(list_document(verses), encoding="utf-8")
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert "안내" in data and data["verses"][0] == {"reference": "John 3:16 (BSB)", "text": "For God so loved the world …"}
+    back = load_verse_file(p, "user")
+    assert back.error is None and back.verses == verses
 
 
-def test_load_verse_file_handles_utf8_bom_and_smart_quotes(tmp_path):
+def test_json_errors_are_reported_with_their_position(tmp_path):
     p = tmp_path / "verses.json"
-    data = {"verses": [{"date": "01-01", "reference": "X 1:1", "text": "“Hello” — world"}]}
+    p.write_text('{"verses": [ {"text": "a"} ', encoding="utf-8")
+    r = load_verse_file(p, "user")
+    assert r.verses == [] and r.error and "line 1" in r.error
+
+
+def test_utf8_bom_and_smart_quotes(tmp_path):
+    p = tmp_path / "verses.json"
+    data = {"verses": [{"reference": "X 1:1", "text": "“Hello” — world"}]}
     p.write_bytes(b"\xef\xbb\xbf" + json.dumps(data, ensure_ascii=False).encode("utf-8"))
-    entries, warnings, error = load_verse_file(p, "user")
-    assert error is None and warnings == []
-    assert entries["01-01"].text == "“Hello” — world"
-
-
-def test_missing_dates_fall_back_without_crashing():
-    partial = {"01-01": Verse("01-01", "R", "T")}
-    lib = VerseLibrary(partial)
-    assert lib.verse_for(dt.date(2026, 6, 6)).text == "T"
-    assert VerseLibrary({}).verse_for(dt.date(2026, 6, 6)).source == "fallback"
+    r = load_verse_file(p, "user")
+    assert r.error is None and r.verses[0].text == "“Hello” — world"
 
 
 def test_odd_user_files_are_reported_not_raised(tmp_path):
-    from versedesk.verses import load_verse_file
-
     cases = {
-        "odd-utf16.json": json.dumps({"verses": [{"date": "1-1", "text": "x"}]}).encode("utf-16") + b"\n",
-        "huge-number.json": ('{"verses": [{"date": "1-1", "text": "x", "n": ' + "9" * 5000 + "}]}").encode(),
+        "odd-utf16.json": json.dumps({"verses": [{"text": "x"}]}).encode("utf-16") + b"\n",
+        "huge-number.json": ('{"verses": [{"text": "x", "n": ' + "9" * 5000 + "}]}").encode(),
         "nested.json": ("[" * 100_000 + "]" * 100_000).encode(),
     }
     for name, raw in cases.items():
         p = tmp_path / name
         p.write_bytes(raw)
-        entries, warnings, error = load_verse_file(p, "user")  # must not raise
-        assert error or entries or warnings, name
+        r = load_verse_file(p, "user")  # must not raise
+        assert r.error or r.verses or r.warnings, name
 
 
-def test_export_round_trip_keeps_user_entries_and_covers_every_day():
-    from versedesk.verses import Verse, VerseLibrary, all_date_keys, export_document, parse_entries
-
-    embedded = {k: Verse(k, f"Book {i}:1 (BSB)", f"Text {i}", "embedded") for i, k in enumerate(all_date_keys())}
-    lib = VerseLibrary(embedded, {"03-01": Verse("03-01", "내 출처", "내가 바꾼 본문", "user")})
-    data = json.loads(export_document(lib))
-    assert len(data["verses"]) == 366 and "안내" in data
-    back, warnings = parse_entries(data, "user")
-    assert warnings == [] and len(back) == 366
-    for k in all_date_keys():
-        assert (back[k].reference, back[k].text) == (lib.verse_for_key(k).reference, lib.verse_for_key(k).text)
-    assert back["03-01"].text == "내가 바꾼 본문"
+def test_same_verse_is_recognised_however_the_reference_is_written():
+    a = Verse("John 3:16–17 (BSB)", "x")
+    assert a.key() == Verse("john 3:16-17", "y").key() == Verse("John  3:16 - 17 (KJV)", "z").key()
+    assert a.key() != Verse("John 3:16", "x").key()
+    assert Verse("", "Same  text").key() == Verse("", "same text").key()
