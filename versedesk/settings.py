@@ -7,7 +7,7 @@ File layout (all keys optional; anything missing or invalid falls back to the de
     {
       "version": 1,
       "autostart": true,
-      "desktop_mode": "owner",
+      "desktop_mode": "bottom",
       "verse": {
         "x": null, "y": null,          # top-left position; null = default (top-right of main screen)
         "width": 520,                  # text box width in pixels (at 100% scaling)
@@ -41,7 +41,7 @@ log = logging.getLogger("versedesk.settings")
 SETTINGS_VERSION = 1
 
 ALIGN_CHOICES = ("left", "center", "right")
-DESKTOP_MODES = ("owner", "bottom")
+DESKTOP_MODES = ("bottom", "owner")
 _COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 
 
@@ -70,7 +70,7 @@ class VerseSettings:
 @dataclass
 class Settings:
     autostart: bool = True
-    desktop_mode: str = "owner"
+    desktop_mode: str = "bottom"
     verse: VerseSettings = field(default_factory=VerseSettings)
     extra: dict[str, Any] = field(default_factory=dict)  # unknown keys, preserved verbatim
 

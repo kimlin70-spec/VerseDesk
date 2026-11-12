@@ -1,36 +1,43 @@
 """Glue VerseDesk widget windows to the Windows desktop (Rainmeter "On Desktop" behaviour).
 
 Requirements: never above normal app windows, not in taskbar/Alt+Tab, still visible after
-Win+D ("Show desktop"), re-attach after explorer.exe restarts, keep Qt's per-pixel-alpha
+Win+D ("Show desktop"), survive explorer.exe restarts, keep Qt's per-pixel-alpha
 (layered) rendering, still receive mouse input when needed.
 
-Approach
---------
-* Each widget stays a *top-level* Qt.Tool | FramelessWindowHint window (Qt makes it
-  WS_EX_LAYERED for the translucent background).  We add WS_EX_TOOLWINDOW +
-  WS_EX_NOACTIVATE (no taskbar/Alt+Tab entry, clicking never activates or raises it),
-  and WS_EX_TRANSPARENT when it should be click-through.
+Approach (default mode "bottom", modelled on Rainmeter's ZPOSITION_ONDESKTOP)
+---------------------------------------------------------------------------
+* Each widget is an *unowned* top-level Qt.Tool | FramelessWindowHint |
+  WindowDoesNotAcceptFocus window with a translucent background (Qt makes it
+  WS_EX_LAYERED).  We make sure it has WS_EX_TOOLWINDOW + WS_EX_NOACTIVATE (no
+  taskbar/Alt+Tab entry; clicking never activates or raises it) and WS_EX_TRANSPARENT
+  while it should be click-through.  It is excluded from Aero Peek.
+* Veto: the widget's nativeEvent() turns every z-order change requested by anyone else
+  (Qt's raise on show, the system, other programs) into SWP_NOZORDER.  Our own moves use
+  SWP_NOSENDCHANGING, which bypasses that message, so only the keeper decides.
 * The "desktop host" is the top-level window that currently contains SHELLDLL_DefView
-  (the desktop icon view): "Progman" normally and on Windows 11 24H2+, or a "WorkerW" in
-  some Windows 10 states.
-* mode "owner" (default): the widget's owner (GWLP_HWNDPARENT) is set to the desktop host.
-  An owned window is always kept above its owner, so when Show desktop raises the desktop
-  window, Windows raises our widgets with it, synchronously.
-* mode "bottom": no owner relationship; the keeper alone tracks the desktop's position.
-* Keeper: every second, and right after any foreground-window change (a WinEvent hook),
-  we re-find the desktop host (explorer restarted? DefView moved?), re-apply owner and
-  styles (Qt resets the owner when it shows a window), and if any visible foreign
-  window has slipped between a widget and the desktop, we put the widget back directly
-  above the desktop window.
+  (the desktop icons): Progman normally and on Windows 11 24H2+, or a WorkerW of
+  explorer.exe after the desktop was "split" on older builds.
+* Keeper: rule = every widget sits *directly above the desktop host* in the z-order.
+  In the normal state the host is at the bottom, so the widgets are below every app.
+  When Show desktop raises the host above the apps, the widgets are put back directly
+  above it (if Explorer made it topmost, inserting there makes them topmost too; they
+  lose that again when the desktop drops).  The keeper runs every 500 ms, every 150 ms
+  while the desktop is raised, and in a short burst after every foreground-window change
+  (WinEvent hook) — Win+D makes the desktop the foreground window.
+* explorer.exe restart: nothing is owned by Explorer, so nothing is destroyed; the
+  keeper simply finds the new host on its next pass.
+
+mode "owner" (experimental fallback, settings.json "desktop_mode": "owner"): the host is
+also set as the widget's owner (and Qt transient parent), so Windows lifts the widgets
+together with the desktop.  Research shows owner groups can drag the desktop up when a
+widget is activated and couple input queues with Explorer, so it is not the default.
 """
 
 from __future__ import annotations
 
 import ctypes
 import logging
-import os
 import platform
-import sys
 import time
 from dataclasses import dataclass, field
 
@@ -42,14 +49,19 @@ from versedesk.win32 import api
 
 log = logging.getLogger("versedesk.desktop")
 
-TICK_MS = 1000
-SOON_MS = 40
+TICK_MS = 500
+RAISED_TICK_MS = 150
+SOON_MS = 30
+BURST_MS = (30, 120, 300, 600, 1000)  # re-checks after a foreground change
 DESKTOP_CLASSES = ("Progman", "WorkerW")
 MAX_WALK = 4096
 FIGHT_WINDOW_S = 10.0
-FIGHT_LIMIT = 8
+FIGHT_LIMIT = 12
 FIGHT_PAUSE_S = 30.0
-MAX_INFO_FIX_LOGS = 25
+MAX_INFO_FIX_LOGS = 40
+OUR_ZORDER_FLAGS = (
+    api.SWP_NOMOVE | api.SWP_NOSIZE | api.SWP_NOACTIVATE | api.SWP_NOOWNERZORDER | api.SWP_NOSENDCHANGING
+)
 
 
 # ----------------------------------------------------------------------------- finding the desktop
@@ -69,61 +81,33 @@ def top_level_workerws(limit: int = 256) -> list[int]:
     return out
 
 
+def shell_window() -> int:
+    """Explorer's desktop window (class Progman), or 0 if Explorer is not the shell."""
+    shell = api.h(api.GetShellWindow())
+    if shell and api.class_name(shell) == "Progman":
+        return shell
+    return api.h(api.FindWindowW("Progman", None))
+
+
 def find_desktop_host() -> int:
-    """HWND of the top-level window hosting the desktop icons (0 if explorer is not running)."""
-    progman = api.h(api.FindWindowW("Progman", None))
-    if progman and _defview_in(progman):
-        return progman
+    """HWND of the top-level window hosting the desktop icons (0 if Explorer is not running).
+
+    No Windows-version checks: Progman if it contains SHELLDLL_DefView (normal state, and
+    always on Windows 11 24H2+); otherwise the visible top-level WorkerW of Explorer's
+    process that contains it (older builds after the desktop was split, e.g. by Win+D or a
+    wallpaper slideshow).  File Explorer windows also contain a SHELLDLL_DefView, so only
+    Progman/WorkerW windows of the shell's process are considered.
+    """
+    shell = shell_window()
+    if not shell:
+        return 0
+    if _defview_in(shell):
+        return shell
+    shell_pid = api.process_id(shell)
     for w in top_level_workerws():
-        if _defview_in(w):
+        if api.IsWindowVisible(w) and api.process_id(w) == shell_pid and _defview_in(w):
             return w
-    return progman
-
-
-def describe_desktop() -> str:
-    try:
-        lines = [f"Windows {platform.version()} ({platform.release()}), {platform.machine()}"]
-        progman = api.h(api.FindWindowW("Progman", None))
-        shell = api.h(api.GetShellWindow())
-        lines.append(f"  Progman: {api.describe(progman)} defview=0x{_defview_in(progman) if progman else 0:X}")
-        lines.append(f"  GetShellWindow: {api.describe(shell)}")
-        for w in top_level_workerws(32):
-            lines.append(f"  WorkerW: {api.describe(w)} defview=0x{_defview_in(w):X}")
-        host = find_desktop_host()
-        lines.append(f"  desktop host: {api.describe(host)}")
-        if host:
-            above, below = [], []
-            w = host
-            for _ in range(6):
-                w = api.h(api.GetWindow(w, api.GW_HWNDPREV))
-                if not w:
-                    break
-                above.append(api.describe(w))
-            w = host
-            for _ in range(3):
-                w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
-                if not w:
-                    break
-                below.append(api.describe(w))
-            lines.append("  z-order just above host (nearest first):")
-            lines += [f"    {d}" for d in above] or ["    (none)"]
-            lines.append("  z-order just below host:")
-            lines += [f"    {d}" for d in below] or ["    (none)"]
-        return "\n".join(lines)
-    except Exception as e:  # diagnostics must never break the app
-        return f"describe_desktop failed: {e}"
-
-
-def _flags(ex: int) -> str:
-    names = [
-        ("TOOLWINDOW", api.WS_EX_TOOLWINDOW),
-        ("NOACTIVATE", api.WS_EX_NOACTIVATE),
-        ("LAYERED", api.WS_EX_LAYERED),
-        ("TRANSPARENT", api.WS_EX_TRANSPARENT),
-        ("TOPMOST", api.WS_EX_TOPMOST),
-        ("APPWINDOW", api.WS_EX_APPWINDOW),
-    ]
-    return "|".join(n for n, bit in names if ex & bit) or "-"
+    return shell  # transitional (DefView being moved) — re-checked on the next pass
 
 
 def is_blocking(w: int, host: int) -> bool:
@@ -132,7 +116,7 @@ def is_blocking(w: int, host: int) -> bool:
         return False
     ex = api.ex_style(w)
     if ex & (api.WS_EX_TOOLWINDOW | api.WS_EX_NOACTIVATE):
-        return False  # other desktop gadgets, palettes, overlays: do not fight them
+        return False  # other desktop gadgets (e.g. Rainmeter skins), palettes, overlays: no fights
     if (ex & api.WS_EX_LAYERED) and (ex & api.WS_EX_TRANSPARENT):
         return False  # click-through overlay
     if host and api.h(api.GetWindow(w, api.GW_OWNER)) == host:
@@ -153,7 +137,7 @@ def check_placement(hwnd: int, host: int, own: set[int] | frozenset[int] = froze
     Walks down the z-order from the widget. Returns (True, 0) when the desktop host is
     reached without meeting a visible foreign window; (False, blocker) when a window that
     should be above the widget is below it; (False, 0) when the host is not below the
-    widget at all (the desktop is covering it).
+    widget at all (the desktop is covering it, e.g. right after Win+D).
     """
     if not host:
         return True, 0
@@ -167,6 +151,76 @@ def check_placement(hwnd: int, host: int, own: set[int] | frozenset[int] = froze
             return False, w
         w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
     return False, 0
+
+
+def desktop_raised(host: int, own: set[int] | frozenset[int] = frozenset()) -> bool:
+    """Heuristic used only to speed up the keeper: True when Show desktop has lifted the
+    host above normal windows (some visible app window lies *below* the host)."""
+    if not host:
+        return False
+    w = api.h(api.GetWindow(host, api.GW_HWNDNEXT))
+    for _ in range(MAX_WALK):
+        if not w:
+            return False
+        if w not in own and is_blocking(w, host):
+            return True
+        w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
+    return False
+
+
+def describe_desktop(own: set[int] | frozenset[int] = frozenset()) -> str:
+    try:
+        lines = [f"Windows {platform.version()} ({platform.release()}), {platform.machine()}"]
+        shell = shell_window()
+        lines.append(
+            f"  shell (Progman): {api.describe(shell)} defview=0x{_defview_in(shell) if shell else 0:X} "
+            f"new_layout={bool(shell and api.ex_style(shell) & api.WS_EX_NOREDIRECTIONBITMAP)}"
+        )
+        for w in top_level_workerws(32):
+            lines.append(f"  WorkerW: {api.describe(w)} defview=0x{_defview_in(w):X}")
+        host = find_desktop_host()
+        lines.append(f"  desktop host: {api.describe(host)} raised={desktop_raised(host, own)}")
+        # the visible z-order, top to bottom (usually 10-40 windows)
+        lines.append("  visible top-level windows, top to bottom:")
+        w = api.h(api.GetTopWindow(None))
+        n = 0
+        for _ in range(MAX_WALK):
+            if not w:
+                break
+            if api.IsWindowVisible(w) or w == host:
+                ex = api.ex_style(w)
+                tags = []
+                if ex & api.WS_EX_TOPMOST:
+                    tags.append("TOPMOST")
+                if w == host:
+                    tags.append("<= DESKTOP HOST")
+                if w in own:
+                    tags.append("<= VerseDesk")
+                if api.IsIconic(w):
+                    tags.append("minimized")
+                if api.is_cloaked(w):
+                    tags.append("cloaked")
+                lines.append(f"    {api.describe(w)} {' '.join(tags)}")
+                n += 1
+                if n >= 60:
+                    lines.append("    ...")
+                    break
+            w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
+        return "\n".join(lines)
+    except Exception as e:  # diagnostics must never break the app
+        return f"describe_desktop failed: {e}"
+
+
+def _flags(ex: int) -> str:
+    names = [
+        ("TOOLWINDOW", api.WS_EX_TOOLWINDOW),
+        ("NOACTIVATE", api.WS_EX_NOACTIVATE),
+        ("LAYERED", api.WS_EX_LAYERED),
+        ("TRANSPARENT", api.WS_EX_TRANSPARENT),
+        ("TOPMOST", api.WS_EX_TOPMOST),
+        ("APPWINDOW", api.WS_EX_APPWINDOW),
+    ]
+    return "|".join(n for n, bit in names if ex & bit) or "-"
 
 
 # ----------------------------------------------------------------------------- the keeper
@@ -183,12 +237,14 @@ class _Pinned:
 
 
 class Win32DesktopLayer(QObject):
-    def __init__(self, mode: str = "owner", parent: QObject | None = None):
+    def __init__(self, mode: str = "bottom", parent: QObject | None = None):
         super().__init__(parent)
-        self.mode = mode if mode in ("owner", "bottom") else "owner"
+        self.mode = mode if mode in ("bottom", "owner") else "bottom"
         self._pinned: dict[int, _Pinned] = {}
         self._host = 0
+        self._raised = False
         self._info_fix_logs = 0
+        self._vetoes = 0
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
@@ -200,35 +256,26 @@ class Win32DesktopLayer(QObject):
         # Keep a reference: if this callback object were garbage-collected Windows would
         # call freed memory.
         self._hook_proc = api.WINEVENTPROC(self._on_win_event)
-        # QWindow wrappers of desktop host windows (QWindow.fromWinId), used as Qt
-        # "transient parent" so Qt itself keeps the owner when it shows a window.
-        # Never deleted: destroying a foreign QWindow must not risk touching explorer's window.
+        # owner mode only: QWindow wrappers of desktop hosts used as Qt transient parent.
+        # Never deleted: destroying a foreign QWindow must not risk touching Explorer's window.
         self._foreign: dict[int, QWindow] = {}
 
     # ---- public API
 
     @property
     def extra_window_flags(self) -> Qt.WindowType:
-        """Flags widgets must be created with.
-
-        In owner mode, Qt.WindowStaysOnBottomHint makes Qt (a) skip its HWND_TOP raise when
-        a Qt.Tool window is shown and (b) turn every z-order request for the window into
-        HWND_BOTTOM, which Windows resolves to "just above the owner" for an owned window.
-        In bottom mode there is no owner, so HWND_BOTTOM could sink the widget *below* the
-        desktop; there the keeper does all z-order work itself.
-        """
-        if self.mode == "owner":
-            return Qt.WindowType.WindowStaysOnBottomHint
-        return Qt.WindowType.Widget
+        return Qt.WindowType.Widget  # no Qt.WindowStaysOnBottomHint: it would fight the Show-desktop lift
 
     def attach(self, widget: QWidget, *, click_through: bool = False) -> None:
-        """Call before the widget is first shown: the native window is created hidden,
-        owned and placed just above the desktop, so it never flashes above other windows."""
+        """Call before the widget is first shown: its native window is created hidden and
+        placed on the desktop layer, so it never flashes above other windows."""
         key = id(widget)
         entry = _Pinned(widget, click_through)
         self._pinned[key] = entry
         widget.installEventFilter(self)
         widget.destroyed.connect(lambda *_a, k=key: self._pinned.pop(k, None))
+        if hasattr(widget, "set_native_filter"):
+            widget.set_native_filter(self.native_filter)
         self._sync_entry(entry, self._current_host(), force=True, allow_hidden=True)
 
     def detach(self, widget: QWidget) -> None:
@@ -236,6 +283,8 @@ class Win32DesktopLayer(QObject):
         if entry is not None:
             try:
                 widget.removeEventFilter(self)
+                if hasattr(widget, "set_native_filter"):
+                    widget.set_native_filter(None)
             except RuntimeError:
                 pass
 
@@ -252,7 +301,7 @@ class Win32DesktopLayer(QObject):
         return bool(entry and entry.click_through)
 
     def start(self) -> None:
-        log.info("desktop layer mode=%s\n%s", self.mode, describe_desktop())
+        log.info("desktop layer mode=%s\n%s", self.mode, describe_desktop(self._own()))
         self._timer.start()
         if not self._hook:
             flags = api.WINEVENT_OUTOFCONTEXT | api.WINEVENT_SKIPOWNPROCESS
@@ -260,7 +309,7 @@ class Win32DesktopLayer(QObject):
                 api.EVENT_SYSTEM_FOREGROUND, api.EVENT_SYSTEM_FOREGROUND, None, self._hook_proc, 0, 0, flags
             )
             if not self._hook:
-                log.warning("SetWinEventHook failed (error %s); relying on the 1 s timer", ctypes.get_last_error())
+                log.warning("SetWinEventHook failed (error %s); relying on the timer", ctypes.get_last_error())
         self._tick()
 
     def stop(self) -> None:
@@ -275,7 +324,8 @@ class Win32DesktopLayer(QObject):
             self._soon.start()
 
     def diagnostics(self) -> str:
-        lines = [describe_desktop()]
+        own = self._own()
+        lines = [describe_desktop(own)]
         host = find_desktop_host()
         for entry in self._pinned.values():
             hwnd = entry.hwnd
@@ -283,20 +333,36 @@ class Win32DesktopLayer(QObject):
                 lines.append(f"  widget {entry.widget.objectName()!r}: no window")
                 continue
             owner = api.h(api.GetWindow(hwnd, api.GW_OWNER))
+            ok, blocker = check_placement(hwnd, host, own)
             lines.append(
-                f"  widget {entry.widget.objectName()!r}: {api.describe(hwnd)} "
-                f"ex={_flags(api.ex_style(hwnd))} owner={api.describe(owner)} "
-                f"owner_is_host={owner == host} directly_above_desktop={self._placed_ok(hwnd, host)}"
+                f"  widget {entry.widget.objectName()!r}: {api.describe(hwnd)} ex={_flags(api.ex_style(hwnd))} "
+                f"owner={api.describe(owner)} directly_above_desktop={ok}"
+                + (f" blocker={api.describe(blocker)}" if blocker else "")
             )
+        lines.append(f"  z-order vetoes so far: {self._vetoes}")
         return "\n".join(lines)
+
+    # ---- the z-order veto (called from the widget's nativeEvent)
+
+    def native_filter(self, message) -> None:
+        """Turn z-order changes requested by anyone else into no-ops. Never raises."""
+        try:
+            msg = api.wintypes.MSG.from_address(int(message))
+            if msg.message != api.WM_WINDOWPOSCHANGING or not msg.lParam:
+                return
+            wp = api.WINDOWPOS.from_address(msg.lParam)
+            if not wp.flags & api.SWP_NOZORDER:
+                wp.flags |= api.SWP_NOZORDER
+                self._vetoes += 1
+                self.request_sync()
+        except Exception:
+            pass
 
     # ---- Qt hooks
 
     def eventFilter(self, obj, event):  # noqa: N802 - Qt naming
         try:
             if event.type() in (QEvent.Type.Show, QEvent.Type.WinIdChange):
-                # Qt resets the owner while showing a window: re-apply it as soon as the
-                # show has completed (next event-loop pass), and once more a bit later.
                 QTimer.singleShot(0, self._tick)
                 self.request_sync()
         except Exception:
@@ -305,11 +371,17 @@ class Win32DesktopLayer(QObject):
 
     def _on_win_event(self, hook, event, hwnd, id_object, id_child, thread, ms):  # noqa: ARG002
         try:
-            self.request_sync()
+            # Win+D makes the desktop the foreground window; Explorer may finish raising it a
+            # little later, so look again a few times over the next second.
+            for delay in BURST_MS:
+                QTimer.singleShot(delay, self._tick)
         except Exception:
             pass
 
     # ---- the work
+
+    def _own(self) -> set[int]:
+        return {e.hwnd for e in self._pinned.values() if e.hwnd}
 
     def _current_host(self) -> int:
         host = find_desktop_host()
@@ -318,7 +390,7 @@ class Win32DesktopLayer(QObject):
                 "desktop host changed: %s -> %s\n%s",
                 f"0x{self._host:X}" if self._host else "none",
                 api.describe(host),
-                describe_desktop(),
+                describe_desktop(self._own()),
             )
             self._host = host
         return host
@@ -328,6 +400,11 @@ class Win32DesktopLayer(QObject):
             host = self._current_host()
             for entry in list(self._pinned.values()):
                 self._sync_entry(entry, host)
+            raised = desktop_raised(host, self._own())
+            if raised != self._raised:
+                self._raised = raised
+                log.info("desktop %s", "raised (Show desktop)" if raised else "back to normal")
+                self._timer.setInterval(RAISED_TICK_MS if raised else TICK_MS)
         except Exception:
             log.exception("desktop sync failed")
 
@@ -342,6 +419,7 @@ class Win32DesktopLayer(QObject):
         if hwnd != entry.hwnd:
             log.info("widget %r has window 0x%X", widget.objectName(), hwnd)
             entry.hwnd = hwnd
+            api.exclude_from_peek(hwnd)
             force = True
         if not hwnd or not api.IsWindow(hwnd):
             return
@@ -353,15 +431,14 @@ class Win32DesktopLayer(QObject):
             owner = api.h(api.GetWindow(hwnd, api.GW_OWNER))
             if owner != host:
                 api.SetWindowLongPtrW(hwnd, api.GWLP_HWNDPARENT, host)
-                log.debug("widget %r owner 0x%X -> 0x%X", widget.objectName(), owner, host)
                 force = True
-        if force or not self._placed_ok(hwnd, host):
+        if force or not check_placement(hwnd, host, self._own())[0]:
             if self._may_fix(entry):
                 self._place_above(entry, host)
 
     def _ensure_transient_parent(self, widget: QWidget, host: int) -> None:
-        """Make Qt aware of the owner. Qt 6.10 re-applies a foreign transient parent as the
-        native owner whenever it shows the window, instead of resetting the owner to NULL."""
+        """owner mode: Qt 6.10 re-applies a foreign transient parent as the native owner
+        whenever it shows the window, instead of resetting the owner to NULL."""
         try:
             handle = widget.windowHandle()
             if handle is None:
@@ -391,11 +468,6 @@ class Win32DesktopLayer(QObject):
         if want != ex:
             api.SetWindowLongPtrW(hwnd, api.GWL_EXSTYLE, want)
 
-    def _placed_ok(self, hwnd: int, host: int) -> bool:
-        own = {e.hwnd for e in self._pinned.values() if e.hwnd}
-        ok, _blocker = check_placement(hwnd, host, own)
-        return ok
-
     def _may_fix(self, entry: _Pinned) -> bool:
         now = time.monotonic()
         if now < entry.pause_until:
@@ -412,33 +484,32 @@ class Win32DesktopLayer(QObject):
                 FIGHT_LIMIT,
                 FIGHT_WINDOW_S,
                 FIGHT_PAUSE_S,
-                describe_desktop(),
+                describe_desktop(self._own()),
             )
             return False
         return True
 
     def _place_above(self, entry: _Pinned, host: int) -> None:
+        """Put the widget directly above the desktop host in the z-order."""
         hwnd = entry.hwnd
         above = api.h(api.GetWindow(host, api.GW_HWNDPREV))
         if above == hwnd:
             return
+        if api.is_topmost(hwnd) and not api.is_topmost(host):
+            # lifted during Show desktop; the desktop has dropped again
+            api.SetWindowPos(hwnd, api.HWND_NOTOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+            above = api.h(api.GetWindow(host, api.GW_HWNDPREV))
+            if above == hwnd:
+                return
         insert_after = above if above else api.HWND_TOP
-        flags = api.SWP_NOMOVE | api.SWP_NOSIZE | api.SWP_NOACTIVATE | api.SWP_NOOWNERZORDER
-        ok = api.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, flags)
+        ok = api.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
         level = logging.INFO if self._info_fix_logs < MAX_INFO_FIX_LOGS else logging.DEBUG
         self._info_fix_logs += 1
         log.log(
             level,
-            "placed widget %r just above the desktop (insert after %s) ok=%s",
+            "placed widget %r just above the desktop (after %s) ok=%s topmost=%s",
             entry.widget.objectName(),
             api.describe(above) if above else "HWND_TOP",
             bool(ok),
+            api.is_topmost(hwnd),
         )
-
-
-def pid() -> int:  # pragma: no cover - tiny helper for diagnostics
-    return os.getpid()
-
-
-def is_windows() -> bool:  # pragma: no cover
-    return sys.platform == "win32"

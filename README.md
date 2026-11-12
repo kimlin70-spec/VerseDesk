@@ -65,7 +65,7 @@
 {
   "version": 1,
   "autostart": true,
-  "desktop_mode": "owner",
+  "desktop_mode": "bottom",
   "verse": {
     "x": null,
     "y": null,
@@ -91,7 +91,7 @@
 | `align` | 줄 맞춤 | `"right"`, `"left"`, `"center"` |
 | `x`, `y` | 위치. `null` 이면 주 모니터 오른쪽 위. 배치 편집으로 옮기면 자동 저장 | `null` |
 | `autostart` | Windows 시작 시 자동 실행 | `true` / `false` |
-| `desktop_mode` | 바탕화면 고정 방식(아래 9번 참고). 바꾸면 **다시 시작**해야 적용 | `"owner"` |
+| `desktop_mode` | 바탕화면 고정 방식(아래 9번 참고). 바꾸면 **다시 시작**해야 적용 | `"bottom"` |
 
 - 쉼표나 따옴표를 빠뜨리면 트레이에 "형식 오류" 알림이 뜨고, 고칠 때까지 이전 설정을 그대로 씁니다.
 - 처음 상태로 되돌리려면: 트레이 메뉴 → 종료 → `settings.json` 삭제 → 다시 실행.
@@ -153,7 +153,7 @@
 말씀이 아예 안 보이거나, Win+D 때 사라지거나, 다른 창 위로 올라온다면:
 
 1. `log.txt` 를 먼저 보내 주세요(7번).
-2. 시험 삼아 `settings.json` 의 `"desktop_mode": "owner"` 를 `"desktop_mode": "bottom"` 으로 바꾸고, 트레이 → 종료 → 다시 실행해 보세요. 결과를 알려 주시면 원인을 좁히는 데 도움이 됩니다.
+2. 시험 삼아 `settings.json` 의 `"desktop_mode": "bottom"` 을 `"desktop_mode": "owner"` 로 바꾸고, 트레이 → 종료 → 다시 실행해 보세요(다른 고정 방식). 결과를 알려 주시면 원인을 좁히는 데 도움이 됩니다. 원래대로 하려면 `"bottom"` 으로 되돌리면 됩니다.
 
 ---
 
@@ -171,7 +171,7 @@ versedesk/
   single_instance.py 중복 실행 방지(명명된 뮤텍스)
   desktop_layer.py   바탕화면 고정 인터페이스(윈도우 외에서는 빈 구현)
   win32/api.py       ctypes 선언
-  win32/desktop.py   바탕화면 고정 구현(소유자=바탕화면 창, z-order 감시)
+  win32/desktop.py   바탕화면 고정 구현(Rainmeter 방식: z-order 거부 + 바탕화면 바로 위 유지)
   ui/verse_widget.py 말씀 위젯, ui/tray.py 트레이 메뉴, ui/icon.py 아이콘
   data/verses.json   내장 366일 구절(tools/build_verses.py 로 생성)
 tools/   bsb.py(원문 조회) build_verses.py verse_plan.tsv make_icon.py write_build_info.py ci_desktop_check.py

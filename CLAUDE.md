@@ -68,15 +68,22 @@
 - 윈도우 전용 코드는 `versedesk/win32/`에만. 다른 OS에서는 `desktop_layer.NullDesktopLayer`가 대신함.
 - Qt 슬롯은 예외를 밖으로 던지지 않음(`app.safe` 데코레이터, excepthook → log.txt).
 - PySide6 함정: `QGraphicsEffect`를 부모 없이 만들면 파이썬 GC가 지워서 효과가 사라짐 → 부모 지정 + 참조 보관.
-- `Qt.Tool` 창은 show() 때 Qt가 raise()를 호출함 → owner 모드에서는 `Qt.WindowStaysOnBottomHint`로 막음(`layer.extra_window_flags`).
+- `Qt.Tool` 창은 show() 때 Qt가 raise()를 호출함 → 위젯의 nativeEvent 거부(veto)로 막음.
 
 ### 바탕화면 고정 방식 (`versedesk/win32/desktop.py`)
-- 위젯 = 최상위 Qt.Tool+Frameless+반투명(WS_EX_LAYERED) 창 + WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE(+클릭 통과 시 WS_EX_TRANSPARENT).
-- "desktop host" = SHELLDLL_DefView를 품은 최상위 창(Progman, 또는 Win10 일부 상태의 WorkerW).
-- `desktop_mode: "owner"`(기본): 위젯의 owner(GWLP_HWNDPARENT)=host → Win+D로 host가 올라오면 위젯도 같이 올라옴.
-  Qt는 창을 show할 때 owner를 NULL로 되돌리므로(updateTransientParent) Show 이벤트 직후 다시 설정.
-- `desktop_mode: "bottom"`: owner 없이 z-order 감시만(대체 수단).
-- 감시: 1초 타이머 + 전경창 변경 WinEvent 훅 → host 재탐색(explorer 재시작), owner/스타일 재적용, 다른 창이 위젯과 host 사이에 끼면 위젯을 host 바로 위로. 다른 프로그램과 자리싸움하면 30초 쉼.
+- Rainmeter의 On Desktop 방식을 따름(조사 결과: Rainmeter·OpenFences·still-today 소스, Qt 6.10 소스 확인).
+- 위젯 = 소유자 없는 최상위 Qt.Tool+Frameless+WindowDoesNotAcceptFocus+반투명(WS_EX_LAYERED) 창
+  + WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE(+클릭 통과 시 WS_EX_TRANSPARENT), Aero Peek 제외.
+- 거부(veto): `ui/desktop_widget.py`의 nativeEvent가 WM_WINDOWPOSCHANGING에 SWP_NOZORDER를 넣어 남(Qt의 show-raise,
+  다른 프로그램)이 z-order를 못 바꾸게 함. 우리 이동은 SWP_NOSENDCHANGING이라 거부를 우회.
+- "desktop host" = SHELLDLL_DefView를 품은 최상위 창(Progman, 또는 구버전에서 분리된 상태의 explorer WorkerW).
+- 규칙: 위젯은 항상 host 바로 위. 평소 host는 맨 아래 → 위젯은 모든 앱 아래. Win+D로 host가 올라오면 위젯도 그 바로 위로
+  다시 놓음(host가 topmost면 위젯도 topmost가 되고, 내려오면 HWND_NOTOPMOST로 해제).
+- 감시: 500ms 타이머(올라온 동안 150ms) + 전경창 변경 WinEvent 훅 후 1초간 5번 재확인. explorer 재시작은 소유 관계가 없으니
+  다음 확인 때 새 host를 찾기만 하면 됨. 다른 프로그램과 자리싸움하면 30초 쉼.
+- `desktop_mode: "owner"`는 실험용 대체 수단(host를 owner/Qt transient parent로). owner 방식은 클릭 시 바탕화면 전체가 딸려
+  올라오거나 Explorer와 입력 큐가 묶이는 문제가 보고되어 기본값이 아님. `Qt.WindowStaysOnBottomHint`는 Win+D 들어올림과
+  싸우므로 쓰지 않음.
 - 실제 Windows 검증은 CI(`tools/ci_desktop_check.py`)가 GitHub windows 러너의 실제 데스크톱에서 함(Win+D, explorer 재시작, 클릭 통과, 중복 실행, 자동 실행). 결과는 Actions의 Job Summary와 `ci-report` 아티팩트(스크린샷, log.txt).
 
 ### 말씀 데이터

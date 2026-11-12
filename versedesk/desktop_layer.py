@@ -25,7 +25,7 @@ log = logging.getLogger("versedesk.desktop")
 class NullDesktopLayer(QObject):
     """Non-Windows stand-in: remembers state so tests can check it."""
 
-    def __init__(self, mode: str = "owner", parent: QObject | None = None):
+    def __init__(self, mode: str = "bottom", parent: QObject | None = None):
         super().__init__(parent)
         self.mode = mode
         self.attached: dict[int, QWidget] = {}
@@ -62,7 +62,7 @@ class NullDesktopLayer(QObject):
         return f"desktop layer: none on {sys.platform}"
 
 
-def create_desktop_layer(mode: str = "owner", parent: QObject | None = None):
+def create_desktop_layer(mode: str = "bottom", parent: QObject | None = None):
     if sys.platform == "win32":
         try:
             from versedesk.win32.desktop import Win32DesktopLayer

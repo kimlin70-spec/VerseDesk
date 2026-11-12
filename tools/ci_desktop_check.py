@@ -187,8 +187,8 @@ def check_widget(verse: int, label: str) -> None:
            bool(ex & api.WS_EX_LAYERED) and bool(ex & api.WS_EX_TRANSPARENT), flags_text(ex))
     expect(f"{label}: not topmost", not ex & api.WS_EX_TOPMOST, flags_text(ex))
     expect(f"{label}: visible", bool(api.IsWindowVisible(verse)))
-    expect(f"{label}: owned by the desktop window", owner == host and host != 0,
-           f"owner=0x{owner:X} host=0x{host:X}")
+    expect(f"{label}: not owned by Explorer's windows (no input coupling)", owner == 0,
+           f"owner={api.describe(owner)}")
     ok, blocker = check_placement(verse, host)
     expect(f"{label}: sits directly above the desktop", ok,
            f"blocker={api.describe(blocker)}" if blocker else ("host above verse" if not ok else ""))
@@ -235,6 +235,18 @@ def run(exe: Path, report: Path) -> None:
                    f"z(test)={zindex(tw)} z(verse)={zindex(verse)}")
             expect("verse still directly above the desktop under other windows", check_placement(verse, find_desktop_host())[0])
             screenshot(report, "02-app-window-on-top")
+
+            # Another program asks Windows to bring the verse to the top: the veto must hold.
+            user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                            ctypes.c_int, ctypes.c_int, wintypes.UINT]
+            user32.SetWindowPos.restype = wintypes.BOOL
+            user32.SetWindowPos(verse, None, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)  # HWND_TOP, no activate
+            time.sleep(0.2)
+            expect("raise attempt by another program is vetoed", zindex(tw) < zindex(verse),
+                   f"z(test)={zindex(tw)} z(verse)={zindex(verse)}")
+            time.sleep(1.5)
+            expect("after the raise attempt the verse is back under the app window", zindex(tw) < zindex(verse)
+                   and check_placement(verse, find_desktop_host())[0], f"z(test)={zindex(tw)} z(verse)={zindex(verse)}")
 
             # Win+D: the desktop comes forward; the verse must stay visible.
             press_win_d()

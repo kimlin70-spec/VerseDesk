@@ -16,6 +16,8 @@ from PySide6.QtCore import QEvent, QPoint, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QWidget
 
+from versedesk.ui.desktop_widget import DesktopWidget
+
 log = logging.getLogger("versedesk.ui.verse")
 
 PADDING = 20  # logical px around the text; leaves room for the shadow
@@ -74,23 +76,13 @@ class _Canvas(QWidget):
             log.exception("painting the verse failed")
 
 
-class VerseWidget(QWidget):
+class VerseWidget(DesktopWidget):
     moved = Signal(int, int)  # top-left after a drag in edit mode (logical px)
 
     def __init__(self, appearance: VerseAppearance | None = None, extra_flags=Qt.WindowType.Widget):
-        flags = (
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowDoesNotAcceptFocus
-            | Qt.WindowType.NoDropShadowWindowHint
-            | extra_flags
-        )
-        super().__init__(None, flags)
+        super().__init__(extra_flags)
         self.setObjectName("verse")
         self.setWindowTitle("VerseDesk Verse")
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self._appearance = appearance or VerseAppearance()
         self._text = ""

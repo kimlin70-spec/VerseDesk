@@ -15,7 +15,7 @@ from versedesk.settings import (
 def test_defaults():
     s = Settings()
     assert s.autostart is True
-    assert s.desktop_mode == "owner"
+    assert s.desktop_mode == "bottom"
     assert s.verse.font_family == "Georgia"
     assert s.verse.x is None and not s.verse.has_custom_position
     assert s.verse.effective_reference_font_size() == 13.0
@@ -25,7 +25,7 @@ def test_round_trip_preserves_everything_including_unknown_keys():
     data = {
         "version": 1,
         "autostart": False,
-        "desktop_mode": "bottom",
+        "desktop_mode": "owner",
         "verse": {"x": -1200, "y": 35, "width": 600, "font_family": "Segoe UI", "font_size": 18.5,
                   "reference_font_size": 12, "color": "#FFEEDD", "shadow": False, "align": "left"},
         "zones": [{"name": "Work", "items": ["C:\\\\Docs"]}],
@@ -46,7 +46,7 @@ def test_invalid_values_fall_back_to_defaults_with_warnings():
         }
     )
     d = VerseSettings()
-    assert s.autostart is True and s.desktop_mode == "owner"
+    assert s.autostart is True and s.desktop_mode == "bottom"
     assert (s.verse.x, s.verse.y) == (None, None)
     assert s.verse.width == d.width and s.verse.font_size == d.font_size
     assert s.verse.color == d.color and s.verse.align == d.align and s.verse.shadow is True
