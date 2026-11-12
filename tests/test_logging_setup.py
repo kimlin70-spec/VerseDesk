@@ -22,3 +22,24 @@ def test_setup_without_crash_report_does_not_touch_crash_file(tmp_path):
     logging_setup.setup_logging(tmp_path / "log.txt")  # e.g. a duplicate launch
     logging_setup.shutdown_logging(clean_exit=False)
     assert crash.read_text(encoding="utf-8") == "from the running instance"
+
+
+def test_clear_crash_report_empties_the_file_but_keeps_reporting(tmp_path):
+    import faulthandler
+
+    crash = tmp_path / "crash.txt"
+    logging_setup.setup_logging(tmp_path / "log.txt")
+    logging_setup.enable_crash_report(crash)
+    try:
+        faulthandler.dump_traceback(file=logging_setup._crash_file)  # stands in for noise
+        logging_setup._crash_file.flush()
+        assert crash.stat().st_size > 0
+        logging_setup.clear_crash_report()  # what aboutToQuit does at logoff
+        assert crash.read_text(encoding="utf-8") == ""
+        assert faulthandler.is_enabled()
+        faulthandler.dump_traceback(file=logging_setup._crash_file)  # a later report starts at 0
+        logging_setup._crash_file.flush()
+        assert crash.read_text(encoding="utf-8").startswith(("Current thread", "Thread", "Stack"))
+    finally:
+        logging_setup.shutdown_logging(clean_exit=False)
+    logging_setup.clear_crash_report()  # harmless when reporting is off

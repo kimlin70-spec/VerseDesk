@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from versedesk.logging_setup import (
+        clear_crash_report,
         enable_crash_report,
         install_qt_message_handler,
         setup_logging,
@@ -77,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         qapp = QApplication([sys.argv[0]] if sys.argv else ["VerseDesk"])
         qapp.setApplicationName("VerseDesk")
         qapp.setQuitOnLastWindowClosed(False)  # we only have tool windows and a tray icon
+        qapp.aboutToQuit.connect(clear_crash_report)  # also runs at Windows logoff/shutdown
 
         from versedesk.app import VerseDeskApp
         from versedesk.housekeeping import clean_in_background

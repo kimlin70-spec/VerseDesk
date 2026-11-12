@@ -124,6 +124,24 @@ def enable_crash_report(crash_file: Path) -> None:
         _crash_file = None
 
 
+def clear_crash_report() -> None:
+    """Empty crash.txt but keep faulthandler on (connected to QCoreApplication.aboutToQuit).
+
+    Qt emits aboutToQuit on a normal quit and also when Windows ends the session (logoff,
+    shutdown), when the process may be terminated before main() gets to shutdown_logging.
+    Without this, harmless output from such a session would be reported at the next start.
+    A real crash after this point is still written, from the start of the file.
+    """
+    if _crash_file is None:
+        return
+    try:
+        _crash_file.seek(0)
+        _crash_file.truncate()
+        _crash_file.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def _adopt_previous_crash(crash_file: Path) -> None:
     """If the previous run died hard, copy faulthandler's report into log.txt."""
     try:
