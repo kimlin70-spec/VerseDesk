@@ -18,7 +18,9 @@ the user cannot easily test one by one:
   * a second launch exits immediately (single instance);
   * autostart (HKCU Run) is registered on first run; settings.json and log.txt exist;
   * `--exit-after` quits cleanly with exit code 0;
-  * resource use while idle (CPU, memory) is measured and reported (WARN if high).
+  * resource use while idle (CPU, memory) is measured and reported (WARN if high);
+  * edit mode (배치 편집): the verse catches the mouse, a real drag moves it, the position
+    is saved to settings.json and a restart shows it there again.
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -76,8 +78,14 @@ user32.SetForegroundWindow.restype = wintypes.BOOL
 user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
 user32.keybd_event.restype = None
 
+user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+user32.SetCursorPos.restype = wintypes.BOOL
+user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
+user32.mouse_event.restype = None
+
 VK_LWIN, VK_D = 0x5B, 0x44
 KEYEVENTF_KEYUP = 0x0002
+MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
 
 
 def top_level_windows() -> list[int]:
@@ -218,6 +226,89 @@ def check_resources(seconds: float = 10.0) -> None:
               f"{elapsed:.0f}s, working set {ws / 2**20:.0f} MB, private {pv / 2**20:.0f} MB")
     expect("idle CPU stays low (under 2% of one core)", pct < 2.0, detail, warn_only=True)
     expect("memory stays modest (working set under 200 MB)", ws < 200 * 2**20, detail, warn_only=True)
+
+
+def drag(x0: int, y0: int, dx: int, dy: int, steps: int = 25) -> None:
+    """Press the left button at (x0, y0), move by (dx, dy) in small steps, release."""
+    user32.SetCursorPos(x0, y0)
+    time.sleep(0.3)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.3)
+    for i in range(1, steps + 1):
+        user32.SetCursorPos(x0 + dx * i // steps, y0 + dy * i // steps)
+        time.sleep(0.03)
+    time.sleep(0.3)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+
+def saved_verse_position(appdata: Path) -> tuple[object, object]:
+    try:
+        verse = json.loads((appdata / "settings.json").read_text(encoding="utf-8")).get("verse", {})
+        return verse.get("x"), verse.get("y")
+    except (OSError, ValueError, AttributeError):
+        return None, None
+
+
+def check_edit_mode(exe: Path, appdata: Path, report: Path) -> None:
+    """배치 편집: the verse catches the mouse, can be dragged, the position is saved, and a
+    restart puts it back there.  (--edit-mode starts the app as if 배치 편집 had been
+    switched on from the tray; the tray menu itself cannot be driven here.)"""
+    proc = subprocess.Popen([str(exe), "--edit-mode", "--exit-after", "30"])
+    moved_to = None
+    try:
+        verse = find_window(VERSE_TITLE, 60)
+        if not expect("edit mode: verse window appears", bool(verse)):
+            return
+        time.sleep(3)
+        ex = api.ex_style(verse)
+        expect("edit mode: the verse catches clicks (no WS_EX_TRANSPARENT)", not ex & api.WS_EX_TRANSPARENT,
+               flags_text(ex))
+        press_win_d()  # uncover the verse: Show desktop lifts it above every window
+        time.sleep(3)
+        l, t, r, b = api.window_rect(verse)
+        x0, y0 = l + 20, b - 12  # on the translucent edit background, away from the text
+        root = root_at(x0, y0)
+        expect("edit mode: the whole box can be grabbed, not only the letters", root == verse,
+               f"WindowFromPoint({x0}, {y0}) -> root {api.describe(root)}")
+        drag(x0, y0, -200, 120)
+        time.sleep(2)
+        l2, t2, _r2, _b2 = api.window_rect(verse)
+        moved_to = (l2, t2)
+        expect("edit mode: dragging moves the verse", abs((l2 - l) + 200) <= 3 and abs((t2 - t) - 120) <= 3,
+               f"({l},{t}) -> ({l2},{t2})")
+        sx, sy = saved_verse_position(appdata)
+        expect("edit mode: the new position is saved in settings.json",
+               isinstance(sx, int) and isinstance(sy, int) and abs(sx - l2) <= 2 and abs(sy - t2) <= 2,
+               f"settings.json x={sx!r} y={sy!r}, window at ({l2},{t2})")
+        screenshot(report, "06-edit-mode-dragged")
+        press_win_d()
+        time.sleep(2)
+    finally:
+        try:
+            code = proc.wait(timeout=90)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            code = None
+    expect("edit mode run quits cleanly", code == 0, f"exit code {code}")
+    if moved_to is None:
+        return
+    proc = subprocess.Popen([str(exe), "--exit-after", "12"])
+    try:
+        verse = find_window(VERSE_TITLE, 60)
+        time.sleep(3)
+        where = api.window_rect(verse)[:2] if verse else None
+        expect("after a restart the verse is where it was dragged to",
+               where is not None and abs(where[0] - moved_to[0]) <= 2 and abs(where[1] - moved_to[1]) <= 2,
+               f"dragged to {moved_to}, after restart {where}")
+        if verse:
+            ex = api.ex_style(verse)
+            expect("after a restart clicks pass through again (edit mode is not remembered)",
+                   bool(ex & api.WS_EX_TRANSPARENT), flags_text(ex))
+    finally:
+        try:
+            proc.wait(timeout=90)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
 
 
 def kill_tree(pid: int) -> None:
@@ -503,6 +594,9 @@ def run(exe: Path, report: Path) -> None:
     # Clean exit path (the same code the tray's 종료 uses).
     clean = subprocess.run([str(exe), "--exit-after", "6"], timeout=120)
     expect("--exit-after quits cleanly with exit code 0", clean.returncode == 0, f"exit code {clean.returncode}")
+
+    # 배치 편집 (edit mode): drag, save, restore after a restart.
+    check_edit_mode(exe, appdata, report)
 
     log = appdata / "log.txt"
     if log.exists():

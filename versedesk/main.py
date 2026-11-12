@@ -22,6 +22,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--no-duplicate-dialog", action="store_true",
                     help="do not show the 'already running' message box (automated checks)")
     ap.add_argument("--version", action="store_true", help="print the version and exit")
+    ap.add_argument("--edit-mode", action="store_true", help=argparse.SUPPRESS)  # automated checks only
     # parse_known_args: never die because of an unexpected argument (e.g. from a shortcut)
     args, _unknown = ap.parse_known_args(argv)
     return args
@@ -98,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             log.info("debug logging enabled (settings.json debug_log)")
         controller = VerseDeskApp(qapp, store, result)
         controller.start()
+        if args.edit_mode:  # automated checks: start as if 배치 편집 had been switched on
+            controller.set_edit_mode(True)
         if args.exit_after is not None:
             QTimer.singleShot(int(max(0.0, args.exit_after) * 1000), controller.quit)
         code = qapp.exec()
