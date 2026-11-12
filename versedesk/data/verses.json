@@ -1,0 +1,1845 @@
+{
+ "format": 1,
+ "translation": "Berean Standard Bible (BSB)",
+ "license": "Public domain. bsb.txt header: \"This text of God's Word has been dedicated to the public domain. Free resources and databases are available at BereanBible.com.\"",
+ "source": {
+  "file": "https://bereanbible.com/bsb.txt",
+  "sha256": "2ac3af1de52d4e68261cba91d85c320b7eadc6560e830d99e591767b8ff5ca96",
+  "superscriptions_from": "https://bereanbible.com/bsb_usfm.zip",
+  "downloads_page": "https://berean.bible/downloads.htm",
+  "retrieved": "2026-11-12"
+ },
+ "notes": "Verse text is copied verbatim from bsb.txt. Psalm superscriptions (USFM \\d, e.g. 'A Psalm of David.') are removed from the start of verse 1 only after checking the verse begins with exactly that text. Consecutive verses are joined with one space.",
+ "verses": [
+  {
+   "date": "01-01",
+   "reference": "Lamentations 3:22–23 (BSB)",
+   "text": "Because of the loving devotion of the LORD we are not consumed, for His mercies never fail. They are new every morning; great is Your faithfulness!"
+  },
+  {
+   "date": "01-02",
+   "reference": "Isaiah 43:19 (BSB)",
+   "text": "Behold, I am about to do something new; even now it is coming. Do you not see it? Indeed, I will make a way in the wilderness and streams in the desert."
+  },
+  {
+   "date": "01-03",
+   "reference": "Psalm 1:1–3 (BSB)",
+   "text": "Blessed is the man who does not walk in the counsel of the wicked, or set foot on the path of sinners, or sit in the seat of mockers. But his delight is in the Law of the LORD, and on His law he meditates day and night. He is like a tree planted by streams of water, yielding its fruit in season, whose leaf does not wither, and who prospers in all he does."
+  },
+  {
+   "date": "01-04",
+   "reference": "Matthew 1:23 (BSB)",
+   "text": "“Behold, the virgin will be with child and will give birth to a son, and they will call Him Immanuel” (which means, “God with us”)."
+  },
+  {
+   "date": "01-05",
+   "reference": "Acts 1:7–8 (BSB)",
+   "text": "Jesus replied, “It is not for you to know times or seasons that the Father has fixed by His own authority. But you will receive power when the Holy Spirit comes upon you, and you will be My witnesses in Jerusalem, and in all Judea and Samaria, and to the ends of the earth.”"
+  },
+  {
+   "date": "01-06",
+   "reference": "Isaiah 1:18–20 (BSB)",
+   "text": "“Come now, let us reason together,” says the LORD. “Though your sins are like scarlet, they will be as white as snow; though they are as red as crimson, they will become like wool. If you are willing and obedient, you will eat the best of the land. But if you resist and rebel, you will be devoured by the sword.” For the mouth of the LORD has spoken."
+  },
+  {
+   "date": "01-07",
+   "reference": "1 Thessalonians 4:13–14 (BSB)",
+   "text": "Brothers, we do not want you to be uninformed about those who sleep in death, so that you will not grieve like the rest, who are without hope. For since we believe that Jesus died and rose again, we also believe that God will bring with Jesus those who have fallen asleep in Him."
+  },
+  {
+   "date": "01-08",
+   "reference": "Genesis 1:1 (BSB)",
+   "text": "In the beginning God created the heavens and the earth."
+  },
+  {
+   "date": "01-09",
+   "reference": "Psalm 4:7–8 (BSB)",
+   "text": "You have filled my heart with more joy than when grain and new wine abound. I will lie down and sleep in peace, for You alone, O LORD, make me dwell in safety."
+  },
+  {
+   "date": "01-10",
+   "reference": "Mark 1:15 (BSB)",
+   "text": "“The time is fulfilled,” He said, “and the kingdom of God is near. Repent and believe in the gospel!”"
+  },
+  {
+   "date": "01-11",
+   "reference": "Proverbs 1:7 (BSB)",
+   "text": "The fear of the LORD is the beginning of knowledge, but fools despise wisdom and discipline."
+  },
+  {
+   "date": "01-12",
+   "reference": "Romans 1:16–17 (BSB)",
+   "text": "I am not ashamed of the gospel, because it is the power of God for salvation to everyone who believes, first to the Jew, then to the Greek. For the gospel reveals the righteousness of God that comes by faith from start to finish, just as it is written: “The righteous will live by faith.”"
+  },
+  {
+   "date": "01-13",
+   "reference": "Jeremiah 1:5 (BSB)",
+   "text": "“Before I formed you in the womb I knew you, and before you were born I set you apart and appointed you as a prophet to the nations.”"
+  },
+  {
+   "date": "01-14",
+   "reference": "Psalm 8:1 (BSB)",
+   "text": "O LORD, our Lord, how majestic is Your name in all the earth! You have set Your glory above the heavens."
+  },
+  {
+   "date": "01-15",
+   "reference": "2 Thessalonians 3:3 (BSB)",
+   "text": "But the Lord is faithful, and He will strengthen you and guard you from the evil one."
+  },
+  {
+   "date": "01-16",
+   "reference": "Luke 1:37 (BSB)",
+   "text": "For no word from God will ever fail.”"
+  },
+  {
+   "date": "01-17",
+   "reference": "1 Corinthians 1:18 (BSB)",
+   "text": "For the message of the cross is foolishness to those who are perishing, but to us who are being saved it is the power of God."
+  },
+  {
+   "date": "01-18",
+   "reference": "Psalm 9:1–2 (BSB)",
+   "text": "I will give thanks to the LORD with all my heart; I will recount all Your wonders. I will be glad and rejoice in You; I will sing praise to Your name, O Most High."
+  },
+  {
+   "date": "01-19",
+   "reference": "Exodus 3:5 (BSB)",
+   "text": "“Do not come any closer,” God said. “Take off your sandals, for the place where you are standing is holy ground.”"
+  },
+  {
+   "date": "01-20",
+   "reference": "John 1:1 (BSB)",
+   "text": "In the beginning was the Word, and the Word was with God, and the Word was God."
+  },
+  {
+   "date": "01-21",
+   "reference": "Ezekiel 36:26–27 (BSB)",
+   "text": "I will give you a new heart and put a new spirit within you; I will remove your heart of stone and give you a heart of flesh. And I will put My Spirit within you and cause you to walk in My statutes and to carefully observe My ordinances."
+  },
+  {
+   "date": "01-22",
+   "reference": "1 Timothy 1:15 (BSB)",
+   "text": "This is a trustworthy saying, worthy of full acceptance: Christ Jesus came into the world to save sinners, of whom I am the worst."
+  },
+  {
+   "date": "01-23",
+   "reference": "Psalm 16:7–8 (BSB)",
+   "text": "I will bless the LORD who counsels me; even at night my conscience instructs me. I have set the LORD always before me. Because He is at my right hand, I will not be shaken."
+  },
+  {
+   "date": "01-24",
+   "reference": "2 Corinthians 1:3–4 (BSB)",
+   "text": "Blessed be the God and Father of our Lord Jesus Christ, the Father of compassion and the God of all comfort, who comforts us in all our troubles, so that we can comfort those in any trouble with the comfort we ourselves have received from God."
+  },
+  {
+   "date": "01-25",
+   "reference": "Matthew 4:4 (BSB)",
+   "text": "But Jesus answered, “It is written: ‘Man shall not live on bread alone, but on every word that comes from the mouth of God.’”"
+  },
+  {
+   "date": "01-26",
+   "reference": "Proverbs 3:3–4 (BSB)",
+   "text": "Never let loving devotion or faithfulness leave you; bind them around your neck, write them on the tablet of your heart. Then you will find favor and high regard in the sight of God and man."
+  },
+  {
+   "date": "01-27",
+   "reference": "Psalm 17:8–9 (BSB)",
+   "text": "Keep me as the apple of Your eye; hide me in the shadow of Your wings from the wicked who assail me, from my mortal enemies who surround me."
+  },
+  {
+   "date": "01-28",
+   "reference": "Daniel 3:16–18 (BSB)",
+   "text": "Shadrach, Meshach, and Abednego replied to the king, “O Nebuchadnezzar, we have no need to answer you in this matter. If the God whom we serve exists, then He is able to deliver us from the blazing fiery furnace and from your hand, O king. But even if He does not, let it be known to you, O king, that we will not serve your gods or worship the golden statue you have set up.”"
+  },
+  {
+   "date": "01-29",
+   "reference": "Mark 4:39–41 (BSB)",
+   "text": "Then Jesus got up and rebuked the wind and the sea. “Silence!” He commanded. “Be still!” And the wind died down, and it was perfectly calm. “Why are you so afraid?” He asked. “Do you still have no faith?” Overwhelmed with fear, they asked one another, “Who is this, that even the wind and the sea obey Him?”"
+  },
+  {
+   "date": "01-30",
+   "reference": "2 Timothy 1:7 (BSB)",
+   "text": "For God has not given us a spirit of fear, but of power, love, and self-control."
+  },
+  {
+   "date": "01-31",
+   "reference": "Galatians 2:20 (BSB)",
+   "text": "I have been crucified with Christ, and I no longer live, but Christ lives in me. The life I live in the body, I live by faith in the Son of God, who loved me and gave Himself up for me."
+  },
+  {
+   "date": "02-01",
+   "reference": "Leviticus 19:18 (BSB)",
+   "text": "Do not seek revenge or bear a grudge against any of your people, but love your neighbor as yourself. I am the LORD."
+  },
+  {
+   "date": "02-02",
+   "reference": "Psalm 19:1–2 (BSB)",
+   "text": "The heavens declare the glory of God; the skies proclaim the work of His hands. Day after day they pour forth speech; night after night they reveal knowledge."
+  },
+  {
+   "date": "02-03",
+   "reference": "Luke 2:13–14 (BSB)",
+   "text": "And suddenly there appeared with the angel a great multitude of the heavenly host, praising God and saying: “Glory to God in the highest, and on earth peace to men on whom His favor rests!”"
+  },
+  {
+   "date": "02-04",
+   "reference": "Hosea 6:3 (BSB)",
+   "text": "So let us know—let us press on to know the LORD. As surely as the sun rises, He will appear; He will come to us like the rain, like the spring showers that water the earth."
+  },
+  {
+   "date": "02-05",
+   "reference": "Ephesians 1:3 (BSB)",
+   "text": "Blessed be the God and Father of our Lord Jesus Christ, who has blessed us in Christ with every spiritual blessing in the heavenly realms."
+  },
+  {
+   "date": "02-06",
+   "reference": "Psalm 20:7 (BSB)",
+   "text": "Some trust in chariots and others in horses, but we trust in the name of the LORD our God."
+  },
+  {
+   "date": "02-07",
+   "reference": "Titus 2:11–13 (BSB)",
+   "text": "For the grace of God has appeared, bringing salvation to everyone. It instructs us to renounce ungodliness and worldly passions, and to live sensible, upright, and godly lives in the present age, as we await the blessed hope and glorious appearance of our great God and Savior Jesus Christ."
+  },
+  {
+   "date": "02-08",
+   "reference": "John 1:12–13 (BSB)",
+   "text": "But to all who did receive Him, to those who believed in His name, He gave the right to become children of God— children born not of blood, nor of the desire or will of man, but born of God."
+  },
+  {
+   "date": "02-09",
+   "reference": "Proverbs 3:9–10 (BSB)",
+   "text": "Honor the LORD with your wealth and with the firstfruits of all your crops; then your barns will be filled with plenty, and your vats will overflow with new wine."
+  },
+  {
+   "date": "02-10",
+   "reference": "Psalm 23:4 (BSB)",
+   "text": "Even though I walk through the valley of the shadow of death, I will fear no evil, for You are with me; Your rod and Your staff, they comfort me."
+  },
+  {
+   "date": "02-11",
+   "reference": "Numbers 6:24–26 (BSB)",
+   "text": "‘May the LORD bless you and keep you; may the LORD cause His face to shine upon you and be gracious to you; may the LORD lift up His countenance toward you and give you peace.’"
+  },
+  {
+   "date": "02-12",
+   "reference": "Philippians 1:20–21 (BSB)",
+   "text": "I eagerly expect and hope that I will in no way be ashamed, but will have complete boldness so that now as always Christ will be exalted in my body, whether by life or by death. For to me, to live is Christ, and to die is gain."
+  },
+  {
+   "date": "02-13",
+   "reference": "Joel 2:12–13 (BSB)",
+   "text": "“Yet even now,” declares the LORD, “return to Me with all your heart, with fasting, weeping, and mourning.” So rend your hearts and not your garments, and return to the LORD your God. For He is gracious and compassionate, slow to anger, abounding in loving devotion. And He relents from sending disaster."
+  },
+  {
+   "date": "02-14",
+   "reference": "1 Corinthians 13:4–5 (BSB)",
+   "text": "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. It is not rude, it is not self-seeking, it is not easily angered, it keeps no account of wrongs."
+  },
+  {
+   "date": "02-15",
+   "reference": "Matthew 5:4–5 (BSB)",
+   "text": "Blessed are those who mourn, for they will be comforted. Blessed are the meek, for they will inherit the earth."
+  },
+  {
+   "date": "02-16",
+   "reference": "Psalm 24:1–2 (BSB)",
+   "text": "The earth is the LORD’s, and the fullness thereof, the world and all who dwell therein. For He has founded it upon the seas and established it upon the waters."
+  },
+  {
+   "date": "02-17",
+   "reference": "Hebrews 1:1–2 (BSB)",
+   "text": "On many past occasions and in many different ways, God spoke to our fathers through the prophets. But in these last days He has spoken to us by His Son, whom He appointed heir of all things, and through whom He made the universe."
+  },
+  {
+   "date": "02-18",
+   "reference": "Colossians 1:27 (BSB)",
+   "text": "To them God has chosen to make known among the Gentiles the glorious riches of this mystery, which is Christ in you, the hope of glory."
+  },
+  {
+   "date": "02-19",
+   "reference": "Mark 9:23 (BSB)",
+   "text": "“If You can?” echoed Jesus. “All things are possible to him who believes!”"
+  },
+  {
+   "date": "02-20",
+   "reference": "Amos 5:24 (BSB)",
+   "text": "But let justice roll on like a river, and righteousness like an ever-flowing stream."
+  },
+  {
+   "date": "02-21",
+   "reference": "Psalm 27:1 (BSB)",
+   "text": "The LORD is my light and my salvation—whom shall I fear? The LORD is the stronghold of my life—whom shall I dread?"
+  },
+  {
+   "date": "02-22",
+   "reference": "Deuteronomy 6:4–5 (BSB)",
+   "text": "Hear, O Israel: The LORD our God, the LORD is One. And you shall love the LORD your God with all your heart and with all your soul and with all your strength."
+  },
+  {
+   "date": "02-23",
+   "reference": "James 1:2–3 (BSB)",
+   "text": "Consider it pure joy, my brothers, when you encounter trials of many kinds, because you know that the testing of your faith develops perseverance."
+  },
+  {
+   "date": "02-24",
+   "reference": "Luke 2:52 (BSB)",
+   "text": "And Jesus grew in wisdom and stature, and in favor with God and man."
+  },
+  {
+   "date": "02-25",
+   "reference": "Psalm 27:13–14 (BSB)",
+   "text": "Still I am certain to see the goodness of the LORD in the land of the living. Wait patiently for the LORD; be strong and courageous. Wait patiently for the LORD!"
+  },
+  {
+   "date": "02-26",
+   "reference": "Acts 2:38–39 (BSB)",
+   "text": "Peter replied, “Repent and be baptized, every one of you, in the name of Jesus Christ for the forgiveness of your sins, and you will receive the gift of the Holy Spirit. This promise belongs to you and your children and to all who are far off—to all whom the Lord our God will call to Himself.”"
+  },
+  {
+   "date": "02-27",
+   "reference": "Micah 5:2 (BSB)",
+   "text": "But you, Bethlehem Ephrathah, who are small among the clans of Judah, out of you will come forth for Me One to be ruler over Israel—One whose origins are of old, from the days of eternity."
+  },
+  {
+   "date": "02-28",
+   "reference": "Proverbs 4:23 (BSB)",
+   "text": "Guard your heart with all diligence, for from it flow springs of life."
+  },
+  {
+   "date": "02-29",
+   "reference": "Psalm 118:24 (BSB)",
+   "text": "This is the day that the LORD has made; we will rejoice and be glad in it."
+  },
+  {
+   "date": "03-01",
+   "reference": "Galatians 5:1 (BSB)",
+   "text": "It is for freedom that Christ has set us free. Stand firm, then, and do not be encumbered once more by a yoke of slavery."
+  },
+  {
+   "date": "03-02",
+   "reference": "John 1:16–17 (BSB)",
+   "text": "From His fullness we have all received grace upon grace. For the law was given through Moses; grace and truth came through Jesus Christ."
+  },
+  {
+   "date": "03-03",
+   "reference": "Psalm 30:4–5 (BSB)",
+   "text": "Sing to the LORD, O you His saints, and praise His holy name. For His anger is fleeting, but His favor lasts a lifetime. Weeping may stay the night, but joy comes in the morning."
+  },
+  {
+   "date": "03-04",
+   "reference": "Romans 5:1–2 (BSB)",
+   "text": "Therefore, since we have been justified through faith, we have peace with God through our Lord Jesus Christ, through whom we have gained access by faith into this grace in which we stand. And we rejoice in the hope of the glory of God."
+  },
+  {
+   "date": "03-05",
+   "reference": "1 Peter 1:6–7 (BSB)",
+   "text": "In this you greatly rejoice, though now for a little while you may have had to suffer grief in various trials so that the proven character of your faith—more precious than gold, which perishes even though refined by fire—may result in praise, glory, and honor at the revelation of Jesus Christ."
+  },
+  {
+   "date": "03-06",
+   "reference": "Matthew 5:9–10 (BSB)",
+   "text": "Blessed are the peacemakers, for they will be called sons of God. Blessed are those who are persecuted because of righteousness, for theirs is the kingdom of heaven."
+  },
+  {
+   "date": "03-07",
+   "reference": "Psalm 31:5 (BSB)",
+   "text": "Into Your hands I commit my spirit; You have redeemed me, O LORD, God of truth."
+  },
+  {
+   "date": "03-08",
+   "reference": "Nahum 1:7 (BSB)",
+   "text": "The LORD is good, a stronghold in the day of distress; He cares for those who trust in Him."
+  },
+  {
+   "date": "03-09",
+   "reference": "Joshua 1:5 (BSB)",
+   "text": "No one shall stand against you all the days of your life. As I was with Moses, so will I be with you; I will never leave you nor forsake you."
+  },
+  {
+   "date": "03-10",
+   "reference": "1 Corinthians 3:16 (BSB)",
+   "text": "Do you not know that you yourselves are God’s temple, and that God’s Spirit dwells in you?"
+  },
+  {
+   "date": "03-11",
+   "reference": "Mark 10:45 (BSB)",
+   "text": "For even the Son of Man did not come to be served, but to serve, and to give His life as a ransom for many.”"
+  },
+  {
+   "date": "03-12",
+   "reference": "Psalm 34:1–3 (BSB)",
+   "text": "I will bless the LORD at all times; His praise will always be on my lips. My soul boasts in the LORD; let the oppressed hear and rejoice. Magnify the LORD with me; let us exalt His name together."
+  },
+  {
+   "date": "03-13",
+   "reference": "2 Peter 1:2–3 (BSB)",
+   "text": "Grace and peace be multiplied to you through the knowledge of God and of Jesus our Lord. His divine power has given us everything we need for life and godliness through the knowledge of Him who called us by His own glory and excellence."
+  },
+  {
+   "date": "03-14",
+   "reference": "Habakkuk 2:3 (BSB)",
+   "text": "For the vision awaits an appointed time; it testifies of the end and does not lie. Though it lingers, wait for it, since it will surely come and will not delay."
+  },
+  {
+   "date": "03-15",
+   "reference": "Proverbs 10:12 (BSB)",
+   "text": "Hatred stirs up dissension, but love covers all transgressions."
+  },
+  {
+   "date": "03-16",
+   "reference": "Psalm 34:17–18 (BSB)",
+   "text": "The righteous cry out, and the LORD hears; He delivers them from all their troubles. The LORD is near to the brokenhearted; He saves the contrite in spirit."
+  },
+  {
+   "date": "03-17",
+   "reference": "Luke 6:27–28 (BSB)",
+   "text": "But to those of you who will listen, I say: Love your enemies, do good to those who hate you, bless those who curse you, pray for those who mistreat you."
+  },
+  {
+   "date": "03-18",
+   "reference": "2 Corinthians 3:17 (BSB)",
+   "text": "Now the Lord is the Spirit, and where the Spirit of the Lord is, there is freedom."
+  },
+  {
+   "date": "03-19",
+   "reference": "Ruth 1:16–17 (BSB)",
+   "text": "But Ruth replied: “Do not urge me to leave you or to turn from following you. For wherever you go, I will go, and wherever you live, I will live; your people will be my people, and your God will be my God. Where you die, I will die, and there I will be buried. May the LORD punish me, and ever so severely, if anything but death separates you and me.”"
+  },
+  {
+   "date": "03-20",
+   "reference": "Song of Solomon 2:11–12 (BSB)",
+   "text": "For now the winter is past; the rain is over and gone. The flowers have appeared in the countryside; the season of singing has come, and the cooing of turtledoves is heard in our land."
+  },
+  {
+   "date": "03-21",
+   "reference": "1 John 1:5 (BSB)",
+   "text": "And this is the message we have heard from Him and announce to you: God is light, and in Him there is no darkness at all."
+  },
+  {
+   "date": "03-22",
+   "reference": "Psalm 37:5–6 (BSB)",
+   "text": "Commit your way to the LORD; trust in Him, and He will do it. He will bring forth your righteousness like the dawn, your justice like the noonday sun."
+  },
+  {
+   "date": "03-23",
+   "reference": "John 3:3 (BSB)",
+   "text": "Jesus replied, “Truly, truly, I tell you, no one can see the kingdom of God unless he is born again.”"
+  },
+  {
+   "date": "03-24",
+   "reference": "Zephaniah 3:17 (BSB)",
+   "text": "The LORD your God is among you; He is mighty to save. He will rejoice over you with gladness; He will quiet you with His love; He will rejoice over you with singing.”"
+  },
+  {
+   "date": "03-25",
+   "reference": "Galatians 4:4–5 (BSB)",
+   "text": "But when the time had fully come, God sent His Son, born of a woman, born under the law, to redeem those under the law, that we might receive our adoption as sons."
+  },
+  {
+   "date": "03-26",
+   "reference": "Psalm 42:1–2 (BSB)",
+   "text": "As the deer pants for streams of water, so my soul longs after You, O God. My soul thirsts for God, the living God. When shall I come and appear in God’s presence?"
+  },
+  {
+   "date": "03-27",
+   "reference": "Matthew 5:14–16 (BSB)",
+   "text": "You are the light of the world. A city on a hill cannot be hidden. Neither do people light a lamp and put it under a basket. Instead, they set it on a stand, and it gives light to everyone in the house. In the same way, let your light shine before men, that they may see your good deeds and glorify your Father in heaven."
+  },
+  {
+   "date": "03-28",
+   "reference": "3 John 1:2 (BSB)",
+   "text": "Beloved, I pray that in every way you may prosper and enjoy good health, as your soul also prospers."
+  },
+  {
+   "date": "03-29",
+   "reference": "Ephesians 2:10 (BSB)",
+   "text": "For we are God’s workmanship, created in Christ Jesus to do good works, which God prepared in advance as our way of life."
+  },
+  {
+   "date": "03-30",
+   "reference": "Zechariah 4:6–7 (BSB)",
+   "text": "So he said to me, “This is the word of the LORD to Zerubbabel: Not by might nor by power, but by My Spirit, says the LORD of Hosts. What are you, O great mountain? Before Zerubbabel you will become a plain. Then he will bring forth the capstone accompanied by shouts of ‘Grace, grace to it!’”"
+  },
+  {
+   "date": "03-31",
+   "reference": "Psalm 46:1 (BSB)",
+   "text": "God is our refuge and strength, an ever-present help in times of trouble."
+  },
+  {
+   "date": "04-01",
+   "reference": "Mark 12:29–31 (BSB)",
+   "text": "Jesus replied, “This is the most important: ‘Hear, O Israel, the Lord our God, the Lord is One. Love the Lord your God with all your heart and with all your soul and with all your mind and with all your strength.’ The second is this: ‘Love your neighbor as yourself.’ No other commandment is greater than these.”"
+  },
+  {
+   "date": "04-02",
+   "reference": "1 Samuel 2:2 (BSB)",
+   "text": "There is no one holy like the LORD. Indeed, there is no one besides You! And there is no Rock like our God."
+  },
+  {
+   "date": "04-03",
+   "reference": "Proverbs 13:20 (BSB)",
+   "text": "He who walks with the wise will become wise, but the companion of fools will be destroyed."
+  },
+  {
+   "date": "04-04",
+   "reference": "Psalm 50:15 (BSB)",
+   "text": "Call upon Me in the day of trouble; I will deliver you, and you will honor Me.”"
+  },
+  {
+   "date": "04-05",
+   "reference": "Philippians 2:9–11 (BSB)",
+   "text": "Therefore God exalted Him to the highest place and gave Him the name above all names, that at the name of Jesus every knee should bow, in heaven and on earth and under the earth, and every tongue confess that Jesus Christ is Lord, to the glory of God the Father."
+  },
+  {
+   "date": "04-06",
+   "reference": "Jude 1:20–21 (BSB)",
+   "text": "But you, beloved, by building yourselves up in your most holy faith and praying in the Holy Spirit, keep yourselves in the love of God as you await the mercy of our Lord Jesus Christ to bring you eternal life."
+  },
+  {
+   "date": "04-07",
+   "reference": "Luke 6:37 (BSB)",
+   "text": "Do not judge, and you will not be judged. Do not condemn, and you will not be condemned. Forgive, and you will be forgiven."
+  },
+  {
+   "date": "04-08",
+   "reference": "Isaiah 6:8 (BSB)",
+   "text": "Then I heard the voice of the Lord saying: “Whom shall I send? Who will go for Us?” And I said: “Here am I. Send me!”"
+  },
+  {
+   "date": "04-09",
+   "reference": "Psalm 51:10–12 (BSB)",
+   "text": "Create in me a clean heart, O God, and renew a right spirit within me. Cast me not away from Your presence; take not Your Holy Spirit from me. Restore to me the joy of Your salvation, and sustain me with a willing spirit."
+  },
+  {
+   "date": "04-10",
+   "reference": "John 3:17 (BSB)",
+   "text": "For God did not send His Son into the world to condemn the world, but to save the world through Him."
+  },
+  {
+   "date": "04-11",
+   "reference": "Colossians 3:1–2 (BSB)",
+   "text": "Therefore, since you have been raised with Christ, strive for the things above, where Christ is seated at the right hand of God. Set your minds on things above, not on earthly things."
+  },
+  {
+   "date": "04-12",
+   "reference": "1 Kings 18:21 (BSB)",
+   "text": "Then Elijah approached all the people and said, “How long will you waver between two opinions? If the LORD is God, follow Him. But if Baal is God, follow him.” But the people did not answer a word."
+  },
+  {
+   "date": "04-13",
+   "reference": "Revelation 1:8 (BSB)",
+   "text": "“I am the Alpha and the Omega,” says the Lord God, who is and was and is to come—the Almighty."
+  },
+  {
+   "date": "04-14",
+   "reference": "Psalm 55:22 (BSB)",
+   "text": "Cast your burden upon the LORD and He will sustain you; He will never let the righteous be shaken."
+  },
+  {
+   "date": "04-15",
+   "reference": "Jeremiah 17:7–8 (BSB)",
+   "text": "But blessed is the man who trusts in the LORD, whose confidence is in Him. He is like a tree planted by the waters that sends out its roots toward the stream. It does not fear when the heat comes, and its leaves are always green. It does not worry in a year of drought, nor does it cease to produce fruit."
+  },
+  {
+   "date": "04-16",
+   "reference": "Matthew 6:6 (BSB)",
+   "text": "But when you pray, go into your inner room, shut your door, and pray to your Father, who is unseen. And your Father, who sees what is done in secret, will reward you."
+  },
+  {
+   "date": "04-17",
+   "reference": "Romans 5:8 (BSB)",
+   "text": "But God proves His love for us in this: While we were still sinners, Christ died for us."
+  },
+  {
+   "date": "04-18",
+   "reference": "Psalm 61:1–3 (BSB)",
+   "text": "Hear my cry, O God; attend to my prayer. From the ends of the earth I call out to You whenever my heart is faint. Lead me to the rock that is higher than I. For You have been my refuge, a tower of strength against the enemy."
+  },
+  {
+   "date": "04-19",
+   "reference": "Proverbs 15:1 (BSB)",
+   "text": "A gentle answer turns away wrath, but a harsh word stirs up anger."
+  },
+  {
+   "date": "04-20",
+   "reference": "Mark 1:35 (BSB)",
+   "text": "Early in the morning, while it was still dark, Jesus got up and went out to a solitary place to pray."
+  },
+  {
+   "date": "04-21",
+   "reference": "1 Thessalonians 5:16–18 (BSB)",
+   "text": "Rejoice at all times. Pray without ceasing. Give thanks in every circumstance, for this is God’s will for you in Christ Jesus."
+  },
+  {
+   "date": "04-22",
+   "reference": "Daniel 12:3 (BSB)",
+   "text": "Then the wise will shine like the brightness of the heavens, and those who lead many to righteousness will shine like the stars forever and ever."
+  },
+  {
+   "date": "04-23",
+   "reference": "Psalm 63:1 (BSB)",
+   "text": "O God, You are my God. Earnestly I seek You; my soul thirsts for You. My body yearns for You in a dry and weary land without water."
+  },
+  {
+   "date": "04-24",
+   "reference": "1 Corinthians 10:13 (BSB)",
+   "text": "No temptation has seized you except what is common to man. And God is faithful; He will not let you be tempted beyond what you can bear. But when you are tempted, He will also provide an escape, so that you can stand up under it."
+  },
+  {
+   "date": "04-25",
+   "reference": "2 Chronicles 7:13–14 (BSB)",
+   "text": "If I close the sky so there is no rain, or if I command the locust to devour the land, or if I send a plague among My people, and if My people who are called by My name humble themselves and pray and seek My face and turn from their wicked ways, then I will hear from heaven, forgive their sin, and heal their land."
+  },
+  {
+   "date": "04-26",
+   "reference": "Luke 19:10 (BSB)",
+   "text": "For the Son of Man came to seek and to save the lost.”"
+  },
+  {
+   "date": "04-27",
+   "reference": "Psalm 73:25–26 (BSB)",
+   "text": "Whom have I in heaven but You? And on earth I desire no one besides You. My flesh and my heart may fail, but God is the strength of my heart and my portion forever."
+  },
+  {
+   "date": "04-28",
+   "reference": "1 Timothy 1:17 (BSB)",
+   "text": "Now to the King eternal, immortal, and invisible, the only God, be honor and glory forever and ever. Amen."
+  },
+  {
+   "date": "04-29",
+   "reference": "Hosea 10:12 (BSB)",
+   "text": "Sow for yourselves righteousness and reap the fruit of loving devotion; break up your unplowed ground. For it is time to seek the LORD until He comes and sends righteousness upon you like rain."
+  },
+  {
+   "date": "04-30",
+   "reference": "2 Corinthians 4:17–18 (BSB)",
+   "text": "For our light and momentary affliction is producing for us an eternal weight of glory that is far beyond comparison. So we fix our eyes not on what is seen, but on what is unseen. For what is seen is temporary, but what is unseen is eternal."
+  },
+  {
+   "date": "05-01",
+   "reference": "John 4:13–14 (BSB)",
+   "text": "Jesus said to her, “Everyone who drinks this water will be thirsty again. But whoever drinks the water I give him will never thirst. Indeed, the water I give him will become in him a fount of water springing up to eternal life.”"
+  },
+  {
+   "date": "05-02",
+   "reference": "Psalm 84:10 (BSB)",
+   "text": "For better is one day in Your courts than a thousand elsewhere. I would rather be a doorkeeper in the house of my God than dwell in the tents of the wicked."
+  },
+  {
+   "date": "05-03",
+   "reference": "Nehemiah 8:10 (BSB)",
+   "text": "Then Nehemiah told them, “Go and eat what is rich, drink what is sweet, and send out portions to those who have nothing prepared, since today is holy to our Lord. Do not grieve, for the joy of the LORD is your strength.”"
+  },
+  {
+   "date": "05-04",
+   "reference": "Proverbs 16:9 (BSB)",
+   "text": "A man’s heart plans his course, but the LORD determines his steps."
+  },
+  {
+   "date": "05-05",
+   "reference": "Matthew 19:14 (BSB)",
+   "text": "But Jesus said, “Let the little children come to Me, and do not hinder them! For the kingdom of heaven belongs to such as these.”"
+  },
+  {
+   "date": "05-06",
+   "reference": "Matthew 6:11–13 (BSB)",
+   "text": "Give us this day our daily bread. And forgive us our debts, as we also have forgiven our debtors. And lead us not into temptation, but deliver us from the evil one.’"
+  },
+  {
+   "date": "05-07",
+   "reference": "Galatians 3:26–28 (BSB)",
+   "text": "You are all sons of God through faith in Christ Jesus. For all of you who were baptized into Christ have clothed yourselves with Christ. There is neither Jew nor Greek, slave nor free, male nor female, for you are all one in Christ Jesus."
+  },
+  {
+   "date": "05-08",
+   "reference": "Exodus 20:12 (BSB)",
+   "text": "Honor your father and mother, so that your days may be long in the land that the LORD your God is giving you."
+  },
+  {
+   "date": "05-09",
+   "reference": "Psalm 90:1–2 (BSB)",
+   "text": "Lord, You have been our dwelling place through all generations. Before the mountains were born or You brought forth the earth and the world, from everlasting to everlasting You are God."
+  },
+  {
+   "date": "05-10",
+   "reference": "Joel 2:28–29 (BSB)",
+   "text": "And afterward, I will pour out My Spirit on all people. Your sons and daughters will prophesy, your old men will dream dreams, your young men will see visions. Even on My menservants and maidservants, I will pour out My Spirit in those days."
+  },
+  {
+   "date": "05-11",
+   "reference": "2 Timothy 3:16–17 (BSB)",
+   "text": "All Scripture is God-breathed and is useful for instruction, for conviction, for correction, and for training in righteousness, so that the man of God may be complete, fully equipped for every good work."
+  },
+  {
+   "date": "05-12",
+   "reference": "Mark 5:36 (BSB)",
+   "text": "But Jesus overheard their conversation and said to Jairus, “Do not be afraid; just believe.”"
+  },
+  {
+   "date": "05-13",
+   "reference": "Psalm 91:2–4 (BSB)",
+   "text": "I will say to the LORD, “You are my refuge and my fortress, my God, in whom I trust.” Surely He will deliver you from the snare of the fowler, and from the deadly plague. He will cover you with His feathers; under His wings you will find refuge; His faithfulness is a shield and rampart."
+  },
+  {
+   "date": "05-14",
+   "reference": "Ephesians 4:32 (BSB)",
+   "text": "Be kind and tenderhearted to one another, forgiving each other just as in Christ God forgave you."
+  },
+  {
+   "date": "05-15",
+   "reference": "Micah 7:7 (BSB)",
+   "text": "But as for me, I will look to the LORD; I will wait for the God of my salvation. My God will hear me."
+  },
+  {
+   "date": "05-16",
+   "reference": "Hebrews 4:12 (BSB)",
+   "text": "For the word of God is living and active. Sharper than any double-edged sword, it pierces even to dividing soul and spirit, joints and marrow. It judges the thoughts and intentions of the heart."
+  },
+  {
+   "date": "05-17",
+   "reference": "Luke 1:38 (BSB)",
+   "text": "“I am the Lord’s servant,” Mary answered. “May it happen to me according to your word.” Then the angel left her."
+  },
+  {
+   "date": "05-18",
+   "reference": "Psalm 95:6 (BSB)",
+   "text": "O come, let us worship and bow down; let us kneel before the LORD our Maker."
+  },
+  {
+   "date": "05-19",
+   "reference": "Job 1:20–21 (BSB)",
+   "text": "Then Job stood up, tore his robe, and shaved his head. He fell to the ground and worshiped, saying: “Naked I came from my mother’s womb, and naked I will return. The LORD gave, and the LORD has taken away. Blessed be the name of the LORD.”"
+  },
+  {
+   "date": "05-20",
+   "reference": "Philippians 4:4–5 (BSB)",
+   "text": "Rejoice in the Lord always. I will say it again: Rejoice! Let your gentleness be apparent to all. The Lord is near."
+  },
+  {
+   "date": "05-21",
+   "reference": "John 8:12 (BSB)",
+   "text": "Once again, Jesus spoke to the people and said, “I am the light of the world. Whoever follows Me will never walk in the darkness, but will have the light of life.”"
+  },
+  {
+   "date": "05-22",
+   "reference": "Psalm 100:3 (BSB)",
+   "text": "Know that the LORD is God. It is He who made us, and we are His; we are His people, and the sheep of His pasture."
+  },
+  {
+   "date": "05-23",
+   "reference": "Habakkuk 2:20 (BSB)",
+   "text": "But the LORD is in His holy temple; let all the earth be silent before Him."
+  },
+  {
+   "date": "05-24",
+   "reference": "Proverbs 16:24 (BSB)",
+   "text": "Pleasant words are a honeycomb, sweet to the soul and healing to the bones."
+  },
+  {
+   "date": "05-25",
+   "reference": "James 1:12 (BSB)",
+   "text": "Blessed is the man who perseveres under trial, because when he has stood the test, he will receive the crown of life that God has promised to those who love Him."
+  },
+  {
+   "date": "05-26",
+   "reference": "Colossians 2:6–7 (BSB)",
+   "text": "Therefore, just as you have received Christ Jesus as Lord, continue to walk in Him, rooted and built up in Him, established in the faith as you were taught, and overflowing with thankfulness."
+  },
+  {
+   "date": "05-27",
+   "reference": "Matthew 6:33 (BSB)",
+   "text": "But seek first the kingdom of God and His righteousness, and all these things will be added unto you."
+  },
+  {
+   "date": "05-28",
+   "reference": "Psalm 103:11–12 (BSB)",
+   "text": "For as high as the heavens are above the earth, so great is His loving devotion for those who fear Him. As far as the east is from the west, so far has He removed our transgressions from us."
+  },
+  {
+   "date": "05-29",
+   "reference": "Ecclesiastes 3:11 (BSB)",
+   "text": "He has made everything beautiful in its time. He has also set eternity in the hearts of men, yet they cannot fathom the work that God has done from beginning to end."
+  },
+  {
+   "date": "05-30",
+   "reference": "Zechariah 9:9 (BSB)",
+   "text": "Rejoice greatly, O Daughter of Zion! Shout in triumph, O Daughter of Jerusalem! See, your King comes to you, righteous and victorious, humble and riding on a donkey, on a colt, the foal of a donkey."
+  },
+  {
+   "date": "05-31",
+   "reference": "Psalm 111:10 (BSB)",
+   "text": "The fear of the LORD is the beginning of wisdom; all who follow His precepts gain rich understanding. His praise endures forever!"
+  },
+  {
+   "date": "06-01",
+   "reference": "Mark 10:7–9 (BSB)",
+   "text": "‘For this reason a man will leave his father and mother and be united to his wife, and the two will become one flesh.’ So they are no longer two, but one flesh. Therefore what God has joined together, let man not separate.”"
+  },
+  {
+   "date": "06-02",
+   "reference": "1 Peter 2:9 (BSB)",
+   "text": "But you are a chosen people, a royal priesthood, a holy nation, a people for God’s own possession, to proclaim the virtues of Him who called you out of darkness into His marvelous light."
+  },
+  {
+   "date": "06-03",
+   "reference": "Romans 8:1–2 (BSB)",
+   "text": "Therefore, there is now no condemnation for those who are in Christ Jesus. For in Christ Jesus the law of the Spirit of life set you free from the law of sin and death."
+  },
+  {
+   "date": "06-04",
+   "reference": "Psalm 119:10–11 (BSB)",
+   "text": "With all my heart I have sought You; do not let me stray from Your commandments. I have hidden Your word in my heart that I might not sin against You."
+  },
+  {
+   "date": "06-05",
+   "reference": "Luke 2:19 (BSB)",
+   "text": "But Mary treasured up all these things and pondered them in her heart."
+  },
+  {
+   "date": "06-06",
+   "reference": "Isaiah 9:2 (BSB)",
+   "text": "The people walking in darkness have seen a great light; on those living in the land of the shadow of death, a light has dawned."
+  },
+  {
+   "date": "06-07",
+   "reference": "1 Corinthians 13:6–7 (BSB)",
+   "text": "Love takes no pleasure in evil, but rejoices in the truth. It bears all things, believes all things, hopes all things, endures all things."
+  },
+  {
+   "date": "06-08",
+   "reference": "Proverbs 17:22 (BSB)",
+   "text": "A joyful heart is good medicine, but a broken spirit dries up the bones."
+  },
+  {
+   "date": "06-09",
+   "reference": "1 John 1:9 (BSB)",
+   "text": "If we confess our sins, He is faithful and just to forgive us our sins and to cleanse us from all unrighteousness."
+  },
+  {
+   "date": "06-10",
+   "reference": "Psalm 121:1–2 (BSB)",
+   "text": "I lift up my eyes to the hills. From where does my help come? My help comes from the LORD, the Maker of heaven and earth."
+  },
+  {
+   "date": "06-11",
+   "reference": "John 10:10 (BSB)",
+   "text": "The thief comes only to steal and kill and destroy. I have come that they may have life, and have it in all its fullness."
+  },
+  {
+   "date": "06-12",
+   "reference": "Song of Solomon 2:16 (BSB)",
+   "text": "My beloved is mine and I am his; he pastures his flock among the lilies."
+  },
+  {
+   "date": "06-13",
+   "reference": "2 Corinthians 5:21 (BSB)",
+   "text": "God made Him who knew no sin to be sin on our behalf, so that in Him we might become the righteousness of God."
+  },
+  {
+   "date": "06-14",
+   "reference": "Psalm 126:5–6 (BSB)",
+   "text": "Those who sow in tears will reap with shouts of joy. He who goes out weeping, bearing a trail of seed, will surely return with shouts of joy, carrying sheaves of grain."
+  },
+  {
+   "date": "06-15",
+   "reference": "Jeremiah 29:11 (BSB)",
+   "text": "For I know the plans I have for you, declares the LORD, plans to prosper you and not to harm you, to give you a future and a hope."
+  },
+  {
+   "date": "06-16",
+   "reference": "Matthew 7:7–8 (BSB)",
+   "text": "Ask, and it will be given to you; seek, and you will find; knock, and the door will be opened to you. For everyone who asks receives; he who seeks finds; and to him who knocks, the door will be opened."
+  },
+  {
+   "date": "06-17",
+   "reference": "Revelation 4:11 (BSB)",
+   "text": "“Worthy are You, our Lord and God, to receive glory and honor and power, for You created all things; by Your will they exist and were created.”"
+  },
+  {
+   "date": "06-18",
+   "reference": "Psalm 133:1 (BSB)",
+   "text": "Behold, how good and pleasant it is when brothers live together in harmony!"
+  },
+  {
+   "date": "06-19",
+   "reference": "Galatians 5:22–23 (BSB)",
+   "text": "But the fruit of the Spirit is love, joy, peace, patience, kindness, goodness, faithfulness, gentleness, and self-control. Against such things there is no law."
+  },
+  {
+   "date": "06-20",
+   "reference": "Mark 11:24 (BSB)",
+   "text": "Therefore I tell you, whatever you ask for in prayer, believe that you have received it, and it will be yours."
+  },
+  {
+   "date": "06-21",
+   "reference": "Genesis 1:31 (BSB)",
+   "text": "And God looked upon all that He had made, and indeed, it was very good. And there was evening, and there was morning—the sixth day."
+  },
+  {
+   "date": "06-22",
+   "reference": "Hosea 6:6 (BSB)",
+   "text": "For I desire mercy, not sacrifice, and the knowledge of God rather than burnt offerings."
+  },
+  {
+   "date": "06-23",
+   "reference": "Psalm 139:7–8 (BSB)",
+   "text": "Where can I go to escape Your Spirit? Where can I flee from Your presence? If I ascend to the heavens, You are there; if I make my bed in Sheol, You are there."
+  },
+  {
+   "date": "06-24",
+   "reference": "Proverbs 22:6 (BSB)",
+   "text": "Train up a child in the way he should go, and when he is old he will not depart from it."
+  },
+  {
+   "date": "06-25",
+   "reference": "2 Timothy 1:8–9 (BSB)",
+   "text": "So do not be ashamed of the testimony of our Lord, or of me, His prisoner. Instead, join me in suffering for the gospel by the power of God. He has saved us and called us to a holy calling, not because of our works, but by His own purpose and by the grace He granted us in Christ Jesus before time began."
+  },
+  {
+   "date": "06-26",
+   "reference": "Luke 4:18–19 (BSB)",
+   "text": "“The Spirit of the Lord is on Me, because He has anointed Me to preach good news to the poor. He has sent Me to proclaim liberty to the captives and recovery of sight to the blind, to release the oppressed, to proclaim the year of the Lord’s favor.”"
+  },
+  {
+   "date": "06-27",
+   "reference": "Ephesians 1:7–8 (BSB)",
+   "text": "In Him we have redemption through His blood, the forgiveness of our trespasses, according to the riches of His grace that He lavished on us with all wisdom and understanding."
+  },
+  {
+   "date": "06-28",
+   "reference": "Psalm 139:23–24 (BSB)",
+   "text": "Search me, O God, and know my heart; test me and know my concerns. See if there is any offensive way in me; lead me in the way everlasting."
+  },
+  {
+   "date": "06-29",
+   "reference": "Joel 2:25–26 (BSB)",
+   "text": "I will repay you for the years eaten by locusts—the swarming locust, the young locust, the destroying locust, and the devouring locust—My great army that I sent against you. You will have plenty to eat, until you are satisfied. You will praise the name of the LORD your God, who has worked wonders for you. My people will never again be put to shame."
+  },
+  {
+   "date": "06-30",
+   "reference": "John 10:27–28 (BSB)",
+   "text": "My sheep listen to My voice; I know them, and they follow Me. I give them eternal life, and they will never perish. No one can snatch them out of My hand."
+  },
+  {
+   "date": "07-01",
+   "reference": "Exodus 14:14 (BSB)",
+   "text": "The LORD will fight for you; you need only to be still.”"
+  },
+  {
+   "date": "07-02",
+   "reference": "Psalm 150:6 (BSB)",
+   "text": "Let everything that has breath praise the LORD! Hallelujah!"
+  },
+  {
+   "date": "07-03",
+   "reference": "Philippians 4:8 (BSB)",
+   "text": "Finally, brothers, whatever is true, whatever is honorable, whatever is right, whatever is pure, whatever is lovely, whatever is admirable—if anything is excellent or praiseworthy—think on these things."
+  },
+  {
+   "date": "07-04",
+   "reference": "Hebrews 11:1 (BSB)",
+   "text": "Now faith is the assurance of what we hope for and the certainty of what we do not see."
+  },
+  {
+   "date": "07-05",
+   "reference": "Matthew 11:28–30 (BSB)",
+   "text": "Come to Me, all you who are weary and burdened, and I will give you rest. Take My yoke upon you and learn from Me, for I am gentle and humble in heart, and you will find rest for your souls. For My yoke is easy and My burden is light.”"
+  },
+  {
+   "date": "07-06",
+   "reference": "Micah 6:8 (BSB)",
+   "text": "He has shown you, O man, what is good. And what does the LORD require of you but to act justly, to love mercy, and to walk humbly with your God?"
+  },
+  {
+   "date": "07-07",
+   "reference": "Psalm 3:3 (BSB)",
+   "text": "But You, O LORD, are a shield around me, my glory, and the One who lifts my head."
+  },
+  {
+   "date": "07-08",
+   "reference": "Colossians 3:23–24 (BSB)",
+   "text": "Whatever you do, work at it with your whole being, as for the Lord and not for men, because you know that you will receive an inheritance from the Lord as your reward. It is the Lord Christ you are serving."
+  },
+  {
+   "date": "07-09",
+   "reference": "Proverbs 1:8–9 (BSB)",
+   "text": "Listen, my son, to your father’s instruction, and do not forsake the teaching of your mother. For they are a garland of grace on your head and a pendant around your neck."
+  },
+  {
+   "date": "07-10",
+   "reference": "Luke 6:35–36 (BSB)",
+   "text": "But love your enemies, do good to them, and lend to them, expecting nothing in return. Then your reward will be great, and you will be sons of the Most High; for He is kind to the ungrateful and wicked. Be merciful, just as your Father is merciful."
+  },
+  {
+   "date": "07-11",
+   "reference": "James 1:19–20 (BSB)",
+   "text": "My beloved brothers, understand this: Everyone should be quick to listen, slow to speak, and slow to anger, for man’s anger does not bring about the righteousness that God desires."
+  },
+  {
+   "date": "07-12",
+   "reference": "Psalm 5:3 (BSB)",
+   "text": "In the morning, O LORD, You hear my voice; at daybreak I lay my plea before You and wait in expectation."
+  },
+  {
+   "date": "07-13",
+   "reference": "Habakkuk 2:14 (BSB)",
+   "text": "For the earth will be filled with the knowledge of the glory of the LORD as the waters cover the sea."
+  },
+  {
+   "date": "07-14",
+   "reference": "Numbers 23:19 (BSB)",
+   "text": "God is not a man, that He should lie, or a son of man, that He should change His mind. Does He speak and not act? Does He promise and not fulfill?"
+  },
+  {
+   "date": "07-15",
+   "reference": "John 13:34–35 (BSB)",
+   "text": "A new commandment I give you: Love one another. As I have loved you, so you also must love one another. By this everyone will know that you are My disciples, if you love one another.”"
+  },
+  {
+   "date": "07-16",
+   "reference": "Romans 8:28 (BSB)",
+   "text": "And we know that God works all things together for the good of those who love Him, who are called according to His purpose."
+  },
+  {
+   "date": "07-17",
+   "reference": "Psalm 8:3–5 (BSB)",
+   "text": "When I behold Your heavens, the work of Your fingers, the moon and the stars, which You have set in place— what is man that You are mindful of him, or the son of man that You care for him? You made him a little lower than the angels; You crowned him with glory and honor."
+  },
+  {
+   "date": "07-18",
+   "reference": "1 Peter 5:7 (BSB)",
+   "text": "Cast all your anxiety on Him, because He cares for you."
+  },
+  {
+   "date": "07-19",
+   "reference": "Matthew 19:26 (BSB)",
+   "text": "Jesus looked at them and said, “With man this is impossible, but with God all things are possible.”"
+  },
+  {
+   "date": "07-20",
+   "reference": "Isaiah 26:3 (BSB)",
+   "text": "You will keep in perfect peace the steadfast of mind, because he trusts in You."
+  },
+  {
+   "date": "07-21",
+   "reference": "Psalm 9:9–10 (BSB)",
+   "text": "The LORD is a refuge for the oppressed, a stronghold in times of trouble. Those who know Your name trust in You, for You, O LORD, have not forsaken those who seek You."
+  },
+  {
+   "date": "07-22",
+   "reference": "1 Corinthians 2:9 (BSB)",
+   "text": "Rather, as it is written: “No eye has seen, no ear has heard, no heart has imagined, what God has prepared for those who love Him.”"
+  },
+  {
+   "date": "07-23",
+   "reference": "Deuteronomy 8:3 (BSB)",
+   "text": "He humbled you, and in your hunger He gave you manna to eat, which neither you nor your fathers had known, so that you might understand that man does not live on bread alone, but on every word that comes from the mouth of the LORD."
+  },
+  {
+   "date": "07-24",
+   "reference": "Luke 6:38 (BSB)",
+   "text": "Give, and it will be given to you. A good measure, pressed down, shaken together, and running over will be poured into your lap. For with the measure you use, it will be measured back to you.”"
+  },
+  {
+   "date": "07-25",
+   "reference": "Psalm 16:11 (BSB)",
+   "text": "You have made known to me the path of life; You will fill me with joy in Your presence, with eternal pleasures at Your right hand."
+  },
+  {
+   "date": "07-26",
+   "reference": "1 John 4:7–8 (BSB)",
+   "text": "Beloved, let us love one another, because love comes from God. Everyone who loves has been born of God and knows God. Whoever does not love does not know God, because God is love."
+  },
+  {
+   "date": "07-27",
+   "reference": "Proverbs 3:5–6 (BSB)",
+   "text": "Trust in the LORD with all your heart, and lean not on your own understanding; in all your ways acknowledge Him, and He will make your paths straight."
+  },
+  {
+   "date": "07-28",
+   "reference": "2 Corinthians 1:20 (BSB)",
+   "text": "For all the promises of God are “Yes” in Christ. And so through Him, our “Amen” is spoken to the glory of God."
+  },
+  {
+   "date": "07-29",
+   "reference": "Jeremiah 33:3 (BSB)",
+   "text": "Call to Me, and I will answer and show you great and unsearchable things you do not know."
+  },
+  {
+   "date": "07-30",
+   "reference": "John 14:6–7 (BSB)",
+   "text": "Jesus answered, “I am the way and the truth and the life. No one comes to the Father except through Me. If you had known Me, you would know My Father as well. From now on you do know Him and have seen Him.”"
+  },
+  {
+   "date": "07-31",
+   "reference": "Psalm 18:1–2 (BSB)",
+   "text": "I love You, O LORD, my strength. The LORD is my rock, my fortress, and my deliverer. My God is my rock, in whom I take refuge, my shield, and the horn of my salvation, my stronghold."
+  },
+  {
+   "date": "08-01",
+   "reference": "Ephesians 3:20–21 (BSB)",
+   "text": "Now to Him who is able to do immeasurably more than all we ask or imagine, according to His power that is at work within us, to Him be the glory in the church and in Christ Jesus throughout all generations, forever and ever. Amen."
+  },
+  {
+   "date": "08-02",
+   "reference": "Revelation 3:20 (BSB)",
+   "text": "Behold, I stand at the door and knock. If anyone hears My voice and opens the door, I will come in and dine with him, and he with Me."
+  },
+  {
+   "date": "08-03",
+   "reference": "Matthew 25:40 (BSB)",
+   "text": "And the King will reply, ‘Truly I tell you, whatever you did for one of the least of these brothers of Mine, you did for Me.’"
+  },
+  {
+   "date": "08-04",
+   "reference": "Psalm 19:14 (BSB)",
+   "text": "May the words of my mouth and the meditation of my heart be pleasing in Your sight, O LORD, my Rock and my Redeemer."
+  },
+  {
+   "date": "08-05",
+   "reference": "Joel 2:32 (BSB)",
+   "text": "And everyone who calls on the name of the LORD will be saved; for on Mount Zion and in Jerusalem there will be deliverance, as the LORD has promised, among the remnant called by the LORD."
+  },
+  {
+   "date": "08-06",
+   "reference": "Joshua 1:9 (BSB)",
+   "text": "Have I not commanded you to be strong and courageous? Do not be afraid; do not be discouraged, for the LORD your God is with you wherever you go.”"
+  },
+  {
+   "date": "08-07",
+   "reference": "Psalm 23:1–3 (BSB)",
+   "text": "The LORD is my shepherd; I shall not want. He makes me lie down in green pastures; He leads me beside quiet waters. He restores my soul; He guides me in the paths of righteousness for the sake of His name."
+  },
+  {
+   "date": "08-08",
+   "reference": "Luke 23:34 (BSB)",
+   "text": "Then Jesus said, “Father, forgive them, for they do not know what they are doing.” And they divided up His garments by casting lots."
+  },
+  {
+   "date": "08-09",
+   "reference": "Philippians 4:19–20 (BSB)",
+   "text": "And my God will supply all your needs according to His glorious riches in Christ Jesus. To our God and Father be glory forever and ever. Amen."
+  },
+  {
+   "date": "08-10",
+   "reference": "2 Timothy 4:7–8 (BSB)",
+   "text": "I have fought the good fight, I have finished the race, I have kept the faith. From now on there is laid up for me the crown of righteousness, which the Lord, the righteous Judge, will award to me on that day—and not only to me, but to all who crave His appearing."
+  },
+  {
+   "date": "08-11",
+   "reference": "Proverbs 3:11–12 (BSB)",
+   "text": "My son, do not reject the discipline of the LORD, and do not loathe His rebuke; for the LORD disciplines the one He loves, as does a father the son in whom he delights."
+  },
+  {
+   "date": "08-12",
+   "reference": "Micah 7:18–19 (BSB)",
+   "text": "Who is a God like You, who pardons iniquity and passes over the transgression of the remnant of His inheritance—who does not retain His anger forever, because He delights in loving devotion? He will again have compassion on us; He will vanquish our iniquities. You will cast out all our sins into the depths of the sea."
+  },
+  {
+   "date": "08-13",
+   "reference": "Psalm 23:5–6 (BSB)",
+   "text": "You prepare a table before me in the presence of my enemies. You anoint my head with oil; my cup overflows. Surely goodness and mercy will follow me all the days of my life, and I will dwell in the house of the LORD forever."
+  },
+  {
+   "date": "08-14",
+   "reference": "John 15:5 (BSB)",
+   "text": "I am the vine and you are the branches. The one who remains in Me, and I in him, will bear much fruit. For apart from Me you can do nothing."
+  },
+  {
+   "date": "08-15",
+   "reference": "John 8:36 (BSB)",
+   "text": "So if the Son sets you free, you will be free indeed."
+  },
+  {
+   "date": "08-16",
+   "reference": "Romans 8:35–37 (BSB)",
+   "text": "Who shall separate us from the love of Christ? Shall trouble or distress or persecution or famine or nakedness or danger or sword? As it is written: “For Your sake we face death all day long; we are considered as sheep to be slaughtered.” No, in all these things we are more than conquerors through Him who loved us."
+  },
+  {
+   "date": "08-17",
+   "reference": "1 Samuel 16:7 (BSB)",
+   "text": "But the LORD said to Samuel, “Do not consider his appearance or height, for I have rejected him; the LORD does not see as man does. For man sees the outward appearance, but the LORD sees the heart.”"
+  },
+  {
+   "date": "08-18",
+   "reference": "Psalm 25:4–5 (BSB)",
+   "text": "Show me Your ways, O LORD; teach me Your paths. Guide me in Your truth and teach me, for You are the God of my salvation; all day long I wait for You."
+  },
+  {
+   "date": "08-19",
+   "reference": "Matthew 28:19–20 (BSB)",
+   "text": "Therefore go and make disciples of all nations, baptizing them in the name of the Father and of the Son and of the Holy Spirit, and teaching them to obey all that I have commanded you. And surely I am with you always, even to the end of the age.”"
+  },
+  {
+   "date": "08-20",
+   "reference": "Hebrews 12:1 (BSB)",
+   "text": "Therefore, since we are surrounded by such a great cloud of witnesses, let us throw off every encumbrance and the sin that so easily entangles, and let us run with endurance the race set out for us."
+  },
+  {
+   "date": "08-21",
+   "reference": "Habakkuk 3:17–18 (BSB)",
+   "text": "Though the fig tree does not bud and no fruit is on the vines, though the olive crop fails and the fields produce no food, though the sheep are cut off from the fold and no cattle are in the stalls, yet I will exult in the LORD; I will rejoice in the God of my salvation!"
+  },
+  {
+   "date": "08-22",
+   "reference": "1 Corinthians 6:19–20 (BSB)",
+   "text": "Do you not know that your body is a temple of the Holy Spirit who is in you, whom you have received from God? You are not your own; you were bought at a price. Therefore glorify God with your body."
+  },
+  {
+   "date": "08-23",
+   "reference": "Psalm 27:4 (BSB)",
+   "text": "One thing I have asked of the LORD; this is what I desire: to dwell in the house of the LORD all the days of my life, to gaze on the beauty of the LORD and seek Him in His temple."
+  },
+  {
+   "date": "08-24",
+   "reference": "John 16:33 (BSB)",
+   "text": "I have told you these things so that in Me you may have peace. In the world you will have tribulation. But take courage; I have overcome the world!”"
+  },
+  {
+   "date": "08-25",
+   "reference": "Proverbs 9:10 (BSB)",
+   "text": "The fear of the LORD is the beginning of wisdom, and knowledge of the Holy One is understanding."
+  },
+  {
+   "date": "08-26",
+   "reference": "James 4:7–8 (BSB)",
+   "text": "Submit yourselves, then, to God. Resist the devil, and he will flee from you. Draw near to God, and He will draw near to you. Cleanse your hands, you sinners, and purify your hearts, you double-minded."
+  },
+  {
+   "date": "08-27",
+   "reference": "Psalm 28:7 (BSB)",
+   "text": "The LORD is my strength and my shield; my heart trusts in Him, and I am helped. Therefore my heart rejoices, and I give thanks to Him with my song."
+  },
+  {
+   "date": "08-28",
+   "reference": "Isaiah 40:8 (BSB)",
+   "text": "The grass withers and the flowers fall, but the word of our God stands forever.”"
+  },
+  {
+   "date": "08-29",
+   "reference": "2 Corinthians 4:8–9 (BSB)",
+   "text": "We are hard pressed on all sides, but not crushed; perplexed, but not in despair; persecuted, but not forsaken; struck down, but not destroyed."
+  },
+  {
+   "date": "08-30",
+   "reference": "Matthew 2:1–2 (BSB)",
+   "text": "After Jesus was born in Bethlehem in Judea, during the time of King Herod, Magi from the east arrived in Jerusalem, asking, “Where is the One who has been born King of the Jews? We saw His star in the east and have come to worship Him.”"
+  },
+  {
+   "date": "08-31",
+   "reference": "Job 19:25–27 (BSB)",
+   "text": "But I know that my Redeemer lives, and in the end He will stand upon the earth. Even after my skin has been destroyed, yet in my flesh I will see God. I will see Him for myself; my eyes will behold Him, and not as a stranger. How my heart yearns within me!"
+  },
+  {
+   "date": "09-01",
+   "reference": "Psalm 30:11–12 (BSB)",
+   "text": "You turned my mourning into dancing; You peeled off my sackcloth and clothed me with joy, that my heart may sing Your praises and not be silent. O LORD my God, I will give thanks forever."
+  },
+  {
+   "date": "09-02",
+   "reference": "John 1:4–5 (BSB)",
+   "text": "In Him was life, and that life was the light of men. The Light shines in the darkness, and the darkness has not overcome it."
+  },
+  {
+   "date": "09-03",
+   "reference": "Ephesians 6:10–11 (BSB)",
+   "text": "Finally, be strong in the Lord and in His mighty power. Put on the full armor of God, so that you can make your stand against the devil’s schemes."
+  },
+  {
+   "date": "09-04",
+   "reference": "Jeremiah 15:16 (BSB)",
+   "text": "Your words were found, and I ate them. Your words became my joy and my heart’s delight. For I bear Your name, O LORD God of Hosts."
+  },
+  {
+   "date": "09-05",
+   "reference": "1 Peter 1:8–9 (BSB)",
+   "text": "Though you have not seen Him, you love Him; and though you do not see Him now, you believe in Him and rejoice with an inexpressible and glorious joy, now that you are receiving the goal of your faith, the salvation of your souls."
+  },
+  {
+   "date": "09-06",
+   "reference": "Psalm 32:1–2 (BSB)",
+   "text": "Blessed is he whose transgressions are forgiven, whose sins are covered. Blessed is the man whose iniquity the LORD does not count against him, in whose spirit there is no deceit."
+  },
+  {
+   "date": "09-07",
+   "reference": "Matthew 4:19 (BSB)",
+   "text": "“Come, follow Me,” Jesus said, “and I will make you fishers of men.”"
+  },
+  {
+   "date": "09-08",
+   "reference": "Ecclesiastes 4:9–10 (BSB)",
+   "text": "Two are better than one, because they have a good return for their labor. For if one falls down, his companion can lift him up; but pity the one who falls without another to help him up!"
+  },
+  {
+   "date": "09-09",
+   "reference": "Philippians 2:3–4 (BSB)",
+   "text": "Do nothing out of selfish ambition or empty pride, but in humility consider others more important than yourselves. Each of you should look not only to your own interests, but also to the interests of others."
+  },
+  {
+   "date": "09-10",
+   "reference": "Psalm 34:8 (BSB)",
+   "text": "Taste and see that the LORD is good; blessed is the man who takes refuge in Him!"
+  },
+  {
+   "date": "09-11",
+   "reference": "Isaiah 40:31 (BSB)",
+   "text": "But those who wait upon the LORD will renew their strength; they will mount up with wings like eagles; they will run and not grow weary, they will walk and not faint."
+  },
+  {
+   "date": "09-12",
+   "reference": "1 John 1:7 (BSB)",
+   "text": "But if we walk in the light as He is in the light, we have fellowship with one another, and the blood of Jesus His Son cleanses us from all sin."
+  },
+  {
+   "date": "09-13",
+   "reference": "John 1:14 (BSB)",
+   "text": "The Word became flesh and made His dwelling among us. We have seen His glory, the glory of the one and only Son from the Father, full of grace and truth."
+  },
+  {
+   "date": "09-14",
+   "reference": "Proverbs 11:25 (BSB)",
+   "text": "A generous soul will prosper, and he who refreshes others will himself be refreshed."
+  },
+  {
+   "date": "09-15",
+   "reference": "Psalm 37:4 (BSB)",
+   "text": "Delight yourself in the LORD, and He will give you the desires of your heart."
+  },
+  {
+   "date": "09-16",
+   "reference": "Romans 10:10 (BSB)",
+   "text": "For with your heart you believe and are justified, and with your mouth you confess and are saved."
+  },
+  {
+   "date": "09-17",
+   "reference": "Matthew 5:6–8 (BSB)",
+   "text": "Blessed are those who hunger and thirst for righteousness, for they will be filled. Blessed are the merciful, for they will be shown mercy. Blessed are the pure in heart, for they will see God."
+  },
+  {
+   "date": "09-18",
+   "reference": "Jeremiah 17:9–10 (BSB)",
+   "text": "The heart is deceitful above all things and beyond cure. Who can understand it? I, the LORD, search the heart; I examine the mind to reward a man according to his way, by what his deeds deserve."
+  },
+  {
+   "date": "09-19",
+   "reference": "Psalm 40:1–3 (BSB)",
+   "text": "I waited patiently for the LORD; He inclined to me and heard my cry. He lifted me up from the pit of despair, out of the miry clay; He set my feet upon a rock, and made my footsteps firm. He put a new song in my mouth, a hymn of praise to our God. Many will see and fear and put their trust in the LORD."
+  },
+  {
+   "date": "09-20",
+   "reference": "Revelation 21:4 (BSB)",
+   "text": "‘He will wipe away every tear from their eyes,’ and there will be no more death or mourning or crying or pain, for the former things have passed away.”"
+  },
+  {
+   "date": "09-21",
+   "reference": "Genesis 50:20 (BSB)",
+   "text": "As for you, what you intended against me for evil, God intended for good, in order to accomplish a day like this—to preserve the lives of many people."
+  },
+  {
+   "date": "09-22",
+   "reference": "1 Corinthians 13:1 (BSB)",
+   "text": "If I speak in the tongues of men and of angels, but have not love, I am only a ringing gong or a clanging cymbal."
+  },
+  {
+   "date": "09-23",
+   "reference": "John 1:29–31 (BSB)",
+   "text": "The next day John saw Jesus coming toward him and said, “Look, the Lamb of God, who takes away the sin of the world! This is He of whom I said, ‘A man who comes after me has surpassed me because He was before me.’ I myself did not know Him, but the reason I came baptizing with water was that He might be revealed to Israel.”"
+  },
+  {
+   "date": "09-24",
+   "reference": "Psalm 42:11 (BSB)",
+   "text": "Why are you downcast, O my soul? Why the unease within me? Put your hope in God, for I will yet praise Him, my Savior and my God."
+  },
+  {
+   "date": "09-25",
+   "reference": "Isaiah 43:2 (BSB)",
+   "text": "When you pass through the waters, I will be with you; and when you go through the rivers, they will not overwhelm you. When you walk through the fire, you will not be scorched; the flames will not set you ablaze."
+  },
+  {
+   "date": "09-26",
+   "reference": "Matthew 5:13 (BSB)",
+   "text": "You are the salt of the earth. But if the salt loses its savor, how can it be made salty again? It is no longer good for anything, except to be thrown out and trampled by men."
+  },
+  {
+   "date": "09-27",
+   "reference": "Hebrews 13:5 (BSB)",
+   "text": "Keep your lives free from the love of money and be content with what you have, for God has said: “Never will I leave you, never will I forsake you.”"
+  },
+  {
+   "date": "09-28",
+   "reference": "2 Corinthians 5:17 (BSB)",
+   "text": "Therefore if anyone is in Christ, he is a new creation. The old has passed away. Behold, the new has come!"
+  },
+  {
+   "date": "09-29",
+   "reference": "Psalm 46:10 (BSB)",
+   "text": "“Be still and know that I am God; I will be exalted among the nations, I will be exalted over the earth.”"
+  },
+  {
+   "date": "09-30",
+   "reference": "Proverbs 14:34 (BSB)",
+   "text": "Righteousness exalts a nation, but sin is a disgrace to any people."
+  },
+  {
+   "date": "10-01",
+   "reference": "Exodus 3:14 (BSB)",
+   "text": "God said to Moses, “I AM WHO I AM. This is what you are to say to the Israelites: ‘I AM has sent me to you.’”"
+  },
+  {
+   "date": "10-02",
+   "reference": "John 3:16 (BSB)",
+   "text": "For God so loved the world that He gave His one and only Son, that everyone who believes in Him shall not perish but have eternal life."
+  },
+  {
+   "date": "10-03",
+   "reference": "Psalm 51:1–2 (BSB)",
+   "text": "Have mercy on me, O God, according to Your loving devotion; according to Your great compassion, blot out my transgressions. Wash me clean of my iniquity and cleanse me from my sin."
+  },
+  {
+   "date": "10-04",
+   "reference": "Jeremiah 29:12–13 (BSB)",
+   "text": "Then you will call upon Me and come and pray to Me, and I will listen to you. You will seek Me and find Me when you search for Me with all your heart."
+  },
+  {
+   "date": "10-05",
+   "reference": "Philippians 3:13–14 (BSB)",
+   "text": "Brothers, I do not consider myself yet to have taken hold of it. But one thing I do: Forgetting what is behind and straining toward what is ahead, I press on toward the goal to win the prize of God’s heavenly calling in Christ Jesus."
+  },
+  {
+   "date": "10-06",
+   "reference": "James 1:5 (BSB)",
+   "text": "Now if any of you lacks wisdom, he should ask God, who gives generously to all without finding fault, and it will be given to him."
+  },
+  {
+   "date": "10-07",
+   "reference": "Matthew 5:43–45 (BSB)",
+   "text": "You have heard that it was said, ‘Love your neighbor’ and ‘Hate your enemy.’ But I tell you, love your enemies and pray for those who persecute you, that you may be sons of your Father in heaven. He causes His sun to rise on the evil and the good, and sends rain on the righteous and the unrighteous."
+  },
+  {
+   "date": "10-08",
+   "reference": "Psalm 51:17 (BSB)",
+   "text": "The sacrifices of God are a broken spirit; a broken and a contrite heart, O God, You will not despise."
+  },
+  {
+   "date": "10-09",
+   "reference": "Romans 12:2 (BSB)",
+   "text": "Do not be conformed to this world, but be transformed by the renewing of your mind. Then you will be able to test and approve what is the good, pleasing, and perfect will of God."
+  },
+  {
+   "date": "10-10",
+   "reference": "Isaiah 53:5 (BSB)",
+   "text": "But He was pierced for our transgressions, He was crushed for our iniquities; the punishment that brought us peace was upon Him, and by His stripes we are healed."
+  },
+  {
+   "date": "10-11",
+   "reference": "John 3:30–31 (BSB)",
+   "text": "He must increase; I must decrease. The One who comes from above is above all. The one who is from the earth belongs to the earth and speaks as one from the earth. The One who comes from heaven is above all."
+  },
+  {
+   "date": "10-12",
+   "reference": "Psalm 56:3–4 (BSB)",
+   "text": "When I am afraid, I put my trust in You. In God, whose word I praise—in God I trust. I will not be afraid. What can man do to me?"
+  },
+  {
+   "date": "10-13",
+   "reference": "1 Peter 3:15–16 (BSB)",
+   "text": "But in your hearts sanctify Christ as Lord. Always be prepared to give a defense to everyone who asks you the reason for the hope that is in you. But respond with gentleness and respect, keeping a clear conscience, so that those who slander you may be put to shame by your good behavior in Christ."
+  },
+  {
+   "date": "10-14",
+   "reference": "Deuteronomy 31:8 (BSB)",
+   "text": "The LORD Himself goes before you; He will be with you. He will never leave you nor forsake you. Do not be afraid or discouraged.”"
+  },
+  {
+   "date": "10-15",
+   "reference": "Proverbs 16:3 (BSB)",
+   "text": "Commit your works to the LORD and your plans will be achieved."
+  },
+  {
+   "date": "10-16",
+   "reference": "1 Corinthians 13:13 (BSB)",
+   "text": "And now these three remain: faith, hope, and love; but the greatest of these is love."
+  },
+  {
+   "date": "10-17",
+   "reference": "Psalm 62:1–2 (BSB)",
+   "text": "In God alone my soul finds rest; my salvation comes from Him. He alone is my rock and my salvation. He is my fortress; I will never be shaken."
+  },
+  {
+   "date": "10-18",
+   "reference": "Matthew 6:9–10 (BSB)",
+   "text": "So then, this is how you should pray: ‘Our Father in heaven, hallowed be Your name. Your kingdom come, Your will be done, on earth as it is in heaven."
+  },
+  {
+   "date": "10-19",
+   "reference": "Isaiah 55:8 (BSB)",
+   "text": "“For My thoughts are not your thoughts, neither are your ways My ways,” declares the LORD."
+  },
+  {
+   "date": "10-20",
+   "reference": "1 John 4:4 (BSB)",
+   "text": "You, little children, are from God and have overcome them, because greater is He who is in you than he who is in the world."
+  },
+  {
+   "date": "10-21",
+   "reference": "Psalm 63:3–5 (BSB)",
+   "text": "Because Your loving devotion is better than life, my lips will glorify You. So I will bless You as long as I live; in Your name I will lift my hands. My soul is satisfied as with the richest of foods; with joyful lips my mouth will praise You."
+  },
+  {
+   "date": "10-22",
+   "reference": "John 8:7 (BSB)",
+   "text": "When they continued to question Him, He straightened up and said to them, “Let him who is without sin among you be the first to cast a stone at her.”"
+  },
+  {
+   "date": "10-23",
+   "reference": "2 Corinthians 12:9 (BSB)",
+   "text": "But He said to me, “My grace is sufficient for you, for My power is perfected in weakness.” Therefore I will boast all the more gladly in my weaknesses, so that the power of Christ may rest on me."
+  },
+  {
+   "date": "10-24",
+   "reference": "Joshua 1:8 (BSB)",
+   "text": "This Book of the Law must not depart from your mouth; meditate on it day and night, so that you may be careful to do everything written in it. For then you will prosper and succeed in all you do."
+  },
+  {
+   "date": "10-25",
+   "reference": "Isaiah 6:2–3 (BSB)",
+   "text": "Above Him stood seraphim, each having six wings: With two wings they covered their faces, with two they covered their feet, and with two they were flying. And they were calling out to one another: “Holy, holy, holy is the LORD of Hosts; all the earth is full of His glory.”"
+  },
+  {
+   "date": "10-26",
+   "reference": "Psalm 84:1–2 (BSB)",
+   "text": "How lovely is Your dwelling place, O LORD of Hosts! My soul longs, even faints, for the courts of the LORD; my heart and my flesh cry out for the living God."
+  },
+  {
+   "date": "10-27",
+   "reference": "Matthew 6:19–21 (BSB)",
+   "text": "Do not store up for yourselves treasures on earth, where moth and rust destroy, and where thieves break in and steal. But store up for yourselves treasures in heaven, where moth and rust do not destroy, and where thieves do not break in and steal. For where your treasure is, there your heart will be also."
+  },
+  {
+   "date": "10-28",
+   "reference": "Hebrews 1:3 (BSB)",
+   "text": "The Son is the radiance of God’s glory and the exact representation of His nature, upholding all things by His powerful word. After He had provided purification for sins, He sat down at the right hand of the Majesty on high."
+  },
+  {
+   "date": "10-29",
+   "reference": "Philippians 4:6–7 (BSB)",
+   "text": "Be anxious for nothing, but in everything, by prayer and petition, with thanksgiving, present your requests to God. And the peace of God, which surpasses all understanding, will guard your hearts and your minds in Christ Jesus."
+  },
+  {
+   "date": "10-30",
+   "reference": "Psalm 84:11–12 (BSB)",
+   "text": "For the LORD God is a sun and a shield; the LORD gives grace and glory; He withholds no good thing from those who walk with integrity. O LORD of Hosts, how blessed is the man who trusts in You!"
+  },
+  {
+   "date": "10-31",
+   "reference": "Ephesians 2:8–9 (BSB)",
+   "text": "For it is by grace you have been saved through faith, and this not from yourselves; it is the gift of God, not by works, so that no one can boast."
+  },
+  {
+   "date": "11-01",
+   "reference": "John 8:31–32 (BSB)",
+   "text": "So He said to the Jews who had believed Him, “If you continue in My word, you are truly My disciples. Then you will know the truth, and the truth will set you free.”"
+  },
+  {
+   "date": "11-02",
+   "reference": "Proverbs 16:18 (BSB)",
+   "text": "Pride goes before destruction, and a haughty spirit before a fall."
+  },
+  {
+   "date": "11-03",
+   "reference": "Isaiah 7:14 (BSB)",
+   "text": "Therefore the Lord Himself will give you a sign: Behold, the virgin will be with child and give birth to a son, and will call Him Immanuel."
+  },
+  {
+   "date": "11-04",
+   "reference": "Romans 3:22–24 (BSB)",
+   "text": "And this righteousness from God comes through faith in Jesus Christ to all who believe. There is no distinction, for all have sinned and fall short of the glory of God, and are justified freely by His grace through the redemption that is in Christ Jesus."
+  },
+  {
+   "date": "11-05",
+   "reference": "Psalm 91:1 (BSB)",
+   "text": "He who dwells in the shelter of the Most High will abide in the shadow of the Almighty."
+  },
+  {
+   "date": "11-06",
+   "reference": "Matthew 6:34 (BSB)",
+   "text": "Therefore do not worry about tomorrow, for tomorrow will worry about itself. Today has enough trouble of its own."
+  },
+  {
+   "date": "11-07",
+   "reference": "James 1:17 (BSB)",
+   "text": "Every good and perfect gift is from above, coming down from the Father of the heavenly lights, with whom there is no change or shifting shadow."
+  },
+  {
+   "date": "11-08",
+   "reference": "Job 13:15 (BSB)",
+   "text": "Though He slay me, I will hope in Him. I will still defend my ways to His face."
+  },
+  {
+   "date": "11-09",
+   "reference": "Psalm 95:1–2 (BSB)",
+   "text": "Come, let us sing for joy to the LORD; let us shout to the Rock of our salvation! Let us enter His presence with thanksgiving; let us make a joyful noise to Him in song."
+  },
+  {
+   "date": "11-10",
+   "reference": "Isaiah 11:6 (BSB)",
+   "text": "The wolf will live with the lamb, and the leopard will lie down with the goat; the calf and young lion and fatling will be together, and a little child will lead them."
+  },
+  {
+   "date": "11-11",
+   "reference": "John 10:11 (BSB)",
+   "text": "I am the good shepherd. The good shepherd lays down His life for the sheep."
+  },
+  {
+   "date": "11-12",
+   "reference": "Philippians 4:13 (BSB)",
+   "text": "I can do all things through Christ who gives me strength."
+  },
+  {
+   "date": "11-13",
+   "reference": "Psalm 100:1–2 (BSB)",
+   "text": "Make a joyful noise to the LORD, all the earth. Serve the LORD with gladness; come into His presence with joyful songs."
+  },
+  {
+   "date": "11-14",
+   "reference": "1 John 4:18 (BSB)",
+   "text": "There is no fear in love, but perfect love drives out fear, because fear involves punishment. The one who fears has not been perfected in love."
+  },
+  {
+   "date": "11-15",
+   "reference": "Matthew 7:12 (BSB)",
+   "text": "In everything, then, do to others as you would have them do to you. For this is the essence of the Law and the Prophets."
+  },
+  {
+   "date": "11-16",
+   "reference": "Proverbs 17:17 (BSB)",
+   "text": "A friend loves at all times, and a brother is born for adversity."
+  },
+  {
+   "date": "11-17",
+   "reference": "Isaiah 26:4 (BSB)",
+   "text": "Trust in the LORD forever, because GOD the LORD is the Rock eternal."
+  },
+  {
+   "date": "11-18",
+   "reference": "Romans 5:3–5 (BSB)",
+   "text": "Not only that, but we also rejoice in our sufferings, because we know that suffering produces perseverance; perseverance, character; and character, hope. And hope does not disappoint us, because God has poured out His love into our hearts through the Holy Spirit, whom He has given us."
+  },
+  {
+   "date": "11-19",
+   "reference": "Psalm 103:1 (BSB)",
+   "text": "Bless the LORD, O my soul; all that is within me, bless His holy name."
+  },
+  {
+   "date": "11-20",
+   "reference": "Genesis 1:27 (BSB)",
+   "text": "So God created man in His own image; in the image of God He created him; male and female He created them."
+  },
+  {
+   "date": "11-21",
+   "reference": "John 11:25–26 (BSB)",
+   "text": "Jesus said to her, “I am the resurrection and the life. Whoever believes in Me will live, even though he dies. And everyone who lives and believes in Me will never die. Do you believe this?”"
+  },
+  {
+   "date": "11-22",
+   "reference": "Hebrews 4:16 (BSB)",
+   "text": "Let us then approach the throne of grace with confidence, so that we may receive mercy and find grace to help us in our time of need."
+  },
+  {
+   "date": "11-23",
+   "reference": "Psalm 107:1 (BSB)",
+   "text": "Give thanks to the LORD, for He is good; His loving devotion endures forever."
+  },
+  {
+   "date": "11-24",
+   "reference": "Romans 6:23 (BSB)",
+   "text": "For the wages of sin is death, but the gift of God is eternal life in Christ Jesus our Lord."
+  },
+  {
+   "date": "11-25",
+   "reference": "Psalm 100:4–5 (BSB)",
+   "text": "Enter His gates with thanksgiving and His courts with praise; give thanks to Him and bless His name. For the LORD is good, and His loving devotion endures forever; His faithfulness continues to all generations."
+  },
+  {
+   "date": "11-26",
+   "reference": "Isaiah 40:28–29 (BSB)",
+   "text": "Do you not know? Have you not heard? The LORD is the everlasting God, the Creator of the ends of the earth. He will not grow tired or weary; His understanding is beyond searching out. He gives power to the faint and increases the strength of the weak."
+  },
+  {
+   "date": "11-27",
+   "reference": "Matthew 18:20 (BSB)",
+   "text": "For where two or three gather together in My name, there am I with them.”"
+  },
+  {
+   "date": "11-28",
+   "reference": "Psalm 118:5–6 (BSB)",
+   "text": "In my distress I called to the LORD, and He answered and set me free. The LORD is on my side; I will not be afraid. What can man do to me?"
+  },
+  {
+   "date": "11-29",
+   "reference": "Deuteronomy 6:6–7 (BSB)",
+   "text": "These words I am commanding you today are to be upon your hearts. And you shall teach them diligently to your children and speak of them when you sit at home and when you walk along the road, when you lie down and when you get up."
+  },
+  {
+   "date": "11-30",
+   "reference": "Romans 8:14–16 (BSB)",
+   "text": "For all who are led by the Spirit of God are sons of God. For you did not receive a spirit of slavery that returns you to fear, but you received the Spirit of adoption to sonship, by whom we cry, “Abba! Father!” The Spirit Himself testifies with our spirit that we are God’s children."
+  },
+  {
+   "date": "12-01",
+   "reference": "James 1:22 (BSB)",
+   "text": "Be doers of the word, and not hearers only. Otherwise, you are deceiving yourselves."
+  },
+  {
+   "date": "12-02",
+   "reference": "John 14:2–3 (BSB)",
+   "text": "In My Father’s house are many rooms. If it were not so, would I have told you that I am going there to prepare a place for you? And if I go and prepare a place for you, I will come back and welcome you into My presence, so that you also may be where I am."
+  },
+  {
+   "date": "12-03",
+   "reference": "Isaiah 41:10 (BSB)",
+   "text": "Do not fear, for I am with you; do not be afraid, for I am your God. I will strengthen you; I will surely help you; I will uphold you with My righteous right hand."
+  },
+  {
+   "date": "12-04",
+   "reference": "Psalm 119:105 (BSB)",
+   "text": "Your word is a lamp to my feet and a light to my path."
+  },
+  {
+   "date": "12-05",
+   "reference": "Proverbs 18:10 (BSB)",
+   "text": "The name of the LORD is a strong tower; the righteous run to it and are safe."
+  },
+  {
+   "date": "12-06",
+   "reference": "Matthew 25:21 (BSB)",
+   "text": "His master replied, ‘Well done, good and faithful servant! You have been faithful with a few things; I will put you in charge of many things. Enter into the joy of your master!’"
+  },
+  {
+   "date": "12-07",
+   "reference": "Romans 8:31 (BSB)",
+   "text": "What then shall we say in response to these things? If God is for us, who can be against us?"
+  },
+  {
+   "date": "12-08",
+   "reference": "Psalm 121:7–8 (BSB)",
+   "text": "The LORD will guard you from all evil; He will preserve your soul. The LORD will watch over your coming and going, both now and forevermore."
+  },
+  {
+   "date": "12-09",
+   "reference": "Hebrews 11:6 (BSB)",
+   "text": "And without faith it is impossible to please God. For anyone who approaches Him must believe that He exists and that He rewards those who earnestly seek Him."
+  },
+  {
+   "date": "12-10",
+   "reference": "Isaiah 49:16 (BSB)",
+   "text": "Behold, I have inscribed you on the palms of My hands; your walls are ever before Me."
+  },
+  {
+   "date": "12-11",
+   "reference": "John 14:27 (BSB)",
+   "text": "Peace I leave with you; My peace I give to you. I do not give to you as the world gives. Do not let your hearts be troubled; do not be afraid."
+  },
+  {
+   "date": "12-12",
+   "reference": "Genesis 28:15 (BSB)",
+   "text": "Look, I am with you, and I will watch over you wherever you go, and I will bring you back to this land. For I will not leave you until I have done what I have promised you.”"
+  },
+  {
+   "date": "12-13",
+   "reference": "Psalm 127:1–2 (BSB)",
+   "text": "Unless the LORD builds the house, its builders labor in vain; unless the LORD protects the city, its watchmen stand guard in vain. In vain you rise early and stay up late, toiling for bread to eat—for He gives sleep to His beloved."
+  },
+  {
+   "date": "12-14",
+   "reference": "Romans 8:38–39 (BSB)",
+   "text": "For I am convinced that neither death nor life, neither angels nor principalities, neither the present nor the future, nor any powers, neither height nor depth, nor anything else in all creation, will be able to separate us from the love of God that is in Christ Jesus our Lord."
+  },
+  {
+   "date": "12-15",
+   "reference": "Matthew 28:6 (BSB)",
+   "text": "He is not here; He has risen, just as He said! Come, see the place where He lay."
+  },
+  {
+   "date": "12-16",
+   "reference": "Hebrews 12:2–3 (BSB)",
+   "text": "Let us fix our eyes on Jesus, the author and perfecter of our faith, who for the joy set before Him endured the cross, scorning its shame, and sat down at the right hand of the throne of God. Consider Him who endured such hostility from sinners, so that you will not grow weary and lose heart."
+  },
+  {
+   "date": "12-17",
+   "reference": "Psalm 139:1–3 (BSB)",
+   "text": "O LORD, You have searched me and known me. You know when I sit and when I rise; You understand my thoughts from afar. You search out my path and my lying down; You are aware of all my ways."
+  },
+  {
+   "date": "12-18",
+   "reference": "Isaiah 54:10 (BSB)",
+   "text": "Though the mountains may be removed and the hills may be shaken, My loving devotion will not depart from you, and My covenant of peace will not be broken,” says the LORD, who has compassion on you."
+  },
+  {
+   "date": "12-19",
+   "reference": "Romans 12:1 (BSB)",
+   "text": "Therefore I urge you, brothers, on account of God’s mercy, to offer your bodies as living sacrifices, holy and pleasing to God, which is your spiritual service of worship."
+  },
+  {
+   "date": "12-20",
+   "reference": "Proverbs 27:17 (BSB)",
+   "text": "As iron sharpens iron, so one man sharpens another."
+  },
+  {
+   "date": "12-21",
+   "reference": "John 15:12–13 (BSB)",
+   "text": "This is My commandment, that you love one another as I have loved you. Greater love has no one than this, that he lay down his life for his friends."
+  },
+  {
+   "date": "12-22",
+   "reference": "Psalm 139:14 (BSB)",
+   "text": "I praise You, for I am fearfully and wonderfully made. Marvelous are Your works, and I know this very well."
+  },
+  {
+   "date": "12-23",
+   "reference": "Deuteronomy 31:6 (BSB)",
+   "text": "Be strong and courageous; do not be afraid or terrified of them, for it is the LORD your God who goes with you; He will never leave you nor forsake you.”"
+  },
+  {
+   "date": "12-24",
+   "reference": "Isaiah 9:6 (BSB)",
+   "text": "For unto us a child is born, unto us a son is given, and the government will be upon His shoulders. And He will be called Wonderful Counselor, Mighty God, Everlasting Father, Prince of Peace."
+  },
+  {
+   "date": "12-25",
+   "reference": "Luke 2:10–12 (BSB)",
+   "text": "But the angel said to them, “Do not be afraid! For behold, I bring you good news of great joy that will be for all the people: Today in the city of David a Savior has been born to you. He is Christ the Lord! And this will be a sign to you: You will find a baby wrapped in swaddling cloths and lying in a manger.”"
+  },
+  {
+   "date": "12-26",
+   "reference": "Hebrews 13:8 (BSB)",
+   "text": "Jesus Christ is the same yesterday and today and forever."
+  },
+  {
+   "date": "12-27",
+   "reference": "Isaiah 55:10–11 (BSB)",
+   "text": "For just as rain and snow fall from heaven and do not return without watering the earth, making it bud and sprout, and providing seed to sow and food to eat, so My word that proceeds from My mouth will not return to Me empty, but it will accomplish what I please, and it will prosper where I send it."
+  },
+  {
+   "date": "12-28",
+   "reference": "Romans 15:13 (BSB)",
+   "text": "Now may the God of hope fill you with all joy and peace as you believe in Him, so that you may overflow with hope by the power of the Holy Spirit."
+  },
+  {
+   "date": "12-29",
+   "reference": "John 19:30 (BSB)",
+   "text": "When Jesus had received the sour wine, He said, “It is finished.” And bowing His head, He yielded up His spirit."
+  },
+  {
+   "date": "12-30",
+   "reference": "Psalm 147:2–3 (BSB)",
+   "text": "The LORD builds up Jerusalem; He gathers the exiles of Israel. He heals the brokenhearted and binds up their wounds."
+  },
+  {
+   "date": "12-31",
+   "reference": "Psalm 90:12 (BSB)",
+   "text": "So teach us to number our days, that we may present a heart of wisdom."
+  }
+ ]
+}
