@@ -24,3 +24,23 @@ def test_edit_mode_and_appearance_changes_relayout(qapp):
     assert w.edit_mode
     w.set_appearance(VerseAppearance(font_size=40, shadow=False))
     w.deleteLater()
+
+
+def test_a_click_outside_edit_mode_is_reported_as_stray(qapp):
+    """Outside edit mode clicks should never reach the verse (they pass through to the
+    desktop); if one does, the widget reports it so the app can log diagnostics."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    w = VerseWidget(VerseAppearance())
+    w.set_verse("For God so loved the world.", "John 3:16 (BSB)")
+    w.show()
+    seen, moved = [], []
+    w.stray_click.connect(lambda x, y: seen.append((x, y)))
+    w.moved.connect(lambda x, y: moved.append((x, y)))
+    QTest.mouseClick(w, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(10, 10))
+    assert len(seen) == 1
+    w.set_edit_mode(True)
+    QTest.mouseClick(w, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(10, 10))
+    assert len(seen) == 1 and len(moved) == 1  # in edit mode a click is a (zero-length) drag
+    w.deleteLater()

@@ -78,6 +78,7 @@ class _Canvas(QWidget):
 
 class VerseWidget(DesktopWidget):
     moved = Signal(int, int)  # top-left after a drag in edit mode (logical px)
+    stray_click = Signal(int, int)  # a click reached the window outside edit mode (should pass through)
 
     def __init__(self, appearance: VerseAppearance | None = None, extra_flags=Qt.WindowType.Widget):
         super().__init__(extra_flags)
@@ -231,6 +232,9 @@ class VerseWidget(DesktopWidget):
             self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
             return
+        if not self._edit:  # clicks should have gone through to the desktop: report it
+            p = event.globalPosition().toPoint()
+            self.stray_click.emit(p.x(), p.y())
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):  # noqa: N802

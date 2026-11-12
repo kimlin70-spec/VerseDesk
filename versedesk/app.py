@@ -7,6 +7,7 @@ import functools
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -30,6 +31,7 @@ log = logging.getLogger("versedesk.app")
 
 POLL_FILES_MS = 2000
 SCREEN_DEBOUNCE_MS = 600
+STRAY_CLICK_LOG_INTERVAL_S = 10.0
 DEFAULT_MARGIN_X = 40
 DEFAULT_MARGIN_Y = 40
 
@@ -103,6 +105,8 @@ class VerseDeskApp(QObject):
             VerseAppearance.from_settings(store.settings.verse), extra_flags=self.layer.extra_window_flags
         )
         self.verse_widget.moved.connect(self._on_verse_moved)
+        self.verse_widget.stray_click.connect(self._on_stray_click)
+        self._last_stray_log = -1e9
 
         self.tray = TrayController(app_icon(), autostart_supported=self.autostart.supported, parent=self)
         self.tray.edit_mode_toggled.connect(self.set_edit_mode)
@@ -268,6 +272,19 @@ class VerseDeskApp(QObject):
             placed = top_right(prim, w.width(), w.height(), DEFAULT_MARGIN_X, DEFAULT_MARGIN_Y)
         if (placed.x, placed.y) != (w.x(), w.y()):
             w.move(placed.x, placed.y)
+
+    @safe
+    def _on_stray_click(self, x: int, y: int) -> None:
+        """A click reached the verse window outside edit mode: it should have gone through to
+        the desktop. Log what the window and the desktop look like right now (rate-limited)."""
+        now = time.monotonic()
+        if now - self._last_stray_log < STRAY_CLICK_LOG_INTERVAL_S:
+            return
+        self._last_stray_log = now
+        log.warning(
+            "a click at (%d, %d) reached the verse window although clicks should pass through to the desktop\n%s",
+            x, y, self.layer.diagnostics(),
+        )
 
     @safe
     def _on_verse_moved(self, x: int, y: int) -> None:

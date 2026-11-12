@@ -20,7 +20,9 @@ the user cannot easily test one by one:
   * `--exit-after` quits cleanly with exit code 0;
   * resource use while idle (CPU, memory) is measured and reported (WARN if high);
   * edit mode (배치 편집): the verse catches the mouse, a real drag moves it, the position
-    is saved to settings.json and a restart shows it there again.
+    is saved to settings.json and a restart shows it there again;
+  * real mouse clicks on the verse's drawn text, in the normal state (runner consoles
+    minimised) and during Show desktop, must not reach the app (it logs any that do).
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -78,6 +80,8 @@ user32.SetForegroundWindow.restype = wintypes.BOOL
 user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
 user32.keybd_event.restype = None
 
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
 user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 user32.SetCursorPos.restype = wintypes.BOOL
 user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
@@ -86,6 +90,9 @@ user32.mouse_event.restype = None
 VK_LWIN, VK_D = 0x5B, 0x44
 KEYEVENTF_KEYUP = 0x0002
 MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
+SW_MINIMIZE = 6
+WHITE_DESKTOP = (255, 255, 255)
+STRAY_CLICK_TEXT = "reached the verse window although clicks should pass through"
 
 
 def top_level_windows() -> list[int]:
@@ -226,6 +233,33 @@ def check_resources(seconds: float = 10.0) -> None:
               f"{elapsed:.0f}s, working set {ws / 2**20:.0f} MB, private {pv / 2**20:.0f} MB")
     expect("idle CPU stays low (under 2% of one core)", pct < 2.0, detail, warn_only=True)
     expect("memory stays modest (working set under 200 MB)", ws < 200 * 2**20, detail, warn_only=True)
+
+
+def minimize_consoles() -> int:
+    """Minimise the runner's own console windows, which otherwise cover the verse."""
+    n = 0
+    for w in top_level_windows():
+        if (api.IsWindowVisible(w) and not api.IsIconic(w)
+                and api.class_name(w) in ("ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS")):
+            user32.ShowWindow(w, SW_MINIMIZE)
+            n += 1
+    return n
+
+
+def click(x: int, y: int) -> None:
+    """A real left click (mouse input, not a message), as a user would make it."""
+    user32.SetCursorPos(x, y)
+    time.sleep(0.2)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    time.sleep(0.05)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+
+def stray_clicks_logged(appdata: Path) -> int:
+    try:
+        return (appdata / "log.txt").read_text(encoding="utf-8", errors="replace").count(STRAY_CLICK_TEXT)
+    except OSError:
+        return 0
 
 
 def drag(x0: int, y0: int, dx: int, dy: int, steps: int = 25) -> None:
@@ -401,7 +435,8 @@ def painted_points(verse: int, points: list[tuple[int, int]], background: tuple[
     return out
 
 
-def check_click_through(verse: int, label: str, background: tuple[int, int, int] | None = None) -> None:
+def check_click_through(verse: int, label: str, background: tuple[int, int, int] | None = None,
+                        appdata: Path | None = None) -> None:
     """A click on the verse must reach the window *below* it.
 
     Every uncovered grid point is hit-tested: any hit on the verse is a FAIL.  When the
@@ -432,6 +467,17 @@ def check_click_through(verse: int, label: str, background: tuple[int, int, int]
     if not painted_below:
         record(name, "WARN", "inconclusive (no drawn pixel sampled): " + detail)
         return
+    if appdata is not None:
+        # Real mouse clicks on drawn text: the app logs any click that reaches the verse.
+        before = stray_clicks_logged(appdata)
+        targets = painted_below[len(painted_below) // 3 :: max(1, len(painted_below) // 4)][:3]
+        for pt in targets:
+            click(*pt)
+            time.sleep(0.4)
+        time.sleep(0.8)
+        caught = stray_clicks_logged(appdata) - before
+        expect(f"{label}: real mouse clicks on the verse's text go through to the desktop", caught == 0,
+               f"{len(targets)} clicks at {targets}; the app saw {caught}")
     # Control: without WS_EX_TRANSPARENT the drawn pixels must be hit, or the test proves nothing.
     # The app re-applies its styles on every keeper tick (150 ms while the desktop is shown),
     # so sample right after removing the flag and retry if the app put it back mid-sample.
@@ -487,6 +533,25 @@ def run(exe: Path, report: Path) -> None:
         check_widget(verse, "start")
         check_resources()
 
+        # Normal state with nothing over the verse (the way a user sees it): the runner's own
+        # console windows cover it, so minimise them, and keep one small app window open away
+        # from the verse (with no app window at all the desktop counts as "shown").
+        n = minimize_consoles()
+        keeper = subprocess.Popen([sys.executable, "-c", (
+            "import tkinter as tk; r = tk.Tk(); r.title('VerseDesk CI keeper'); "
+            "r.geometry('320x150+20+560'); r.after(240000, r.destroy); r.mainloop()")])
+        procs.append(keeper)
+        find_window("VerseDesk CI keeper", 30)
+        time.sleep(2.5)
+        print(f"  minimised {n} console window(s)", flush=True)
+        screenshot(report, "01b-normal-state-uncovered")
+        ex = api.ex_style(verse)
+        expect("normal state: the verse is in its normal place (not lifted)", not ex & api.WS_EX_TOPMOST
+               and check_placement(verse, find_desktop_host())[0], flags_text(ex))
+        check_click_through(verse, "normal state", background=WHITE_DESKTOP, appdata=appdata)
+        keeper.kill()
+        time.sleep(1)
+
         # A normal application window on top of the verse must stay on top of it.
         l, t, r, b = api.window_rect(verse)
         geo = f"{max(200, r - l + 80)}x{max(150, b - t + 80)}+{l - 40}+{t - 40}"
@@ -535,7 +600,7 @@ def run(exe: Path, report: Path) -> None:
                 expect("after Win+D the verse is not covered", visible_on_top_at(verse, [host, tw]))
                 # nothing covers the verse now and the desktop behind it is plain dark blue, so
                 # this hit test (with its control) really decides click-through
-                check_click_through(verse, "after Win+D", background=DARK_DESKTOP)
+                check_click_through(verse, "after Win+D", background=DARK_DESKTOP, appdata=appdata)
                 press_win_d()
                 time.sleep(3)
                 screenshot(report, "04-after-second-win-d")
