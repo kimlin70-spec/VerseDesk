@@ -90,6 +90,12 @@ def link_is_possible(actions) -> bool:
     return bool(actions & Qt.DropAction.LinkAction)
 
 
+def _actions_text(actions) -> str:
+    names = [n for n, a in (("copy", Qt.DropAction.CopyAction), ("move", Qt.DropAction.MoveAction),
+                            ("link", Qt.DropAction.LinkAction)) if actions & a]
+    return "+".join(names) or "none"
+
+
 class ZoneWidget(DesktopWidget):
     open_requested = Signal(str)
     remove_requested = Signal(str)
@@ -437,6 +443,12 @@ class ZoneWidget(DesktopWidget):
 
     def dragEnterEvent(self, event):  # noqa: N802
         accepted = self._accept_link(event)
+        mime = event.mimeData()
+        log.info(
+            "drag entered zone %s: %s, offered actions %s, formats %s",
+            self.zone_id, "accepted as link" if accepted else "refused",
+            _actions_text(event.possibleActions()), ", ".join(mime.formats()[:6]) if mime else "-",
+        )
         if accepted != self._drop_hover:
             self._drop_hover = accepted
             self.update()
@@ -457,6 +469,7 @@ class ZoneWidget(DesktopWidget):
             return
         event.setDropAction(Qt.DropAction.LinkAction)  # never Move or Copy: originals stay put
         event.accept()
+        log.info("drop on zone %s: %d path(s) taken as a link", self.zone_id, len(paths))
         self.paths_dropped.emit(paths)
 
 

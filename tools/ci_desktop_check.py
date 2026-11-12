@@ -420,11 +420,16 @@ def ole_drag_file(path: Path, target: tuple[int, int]) -> object:
         time.sleep(0.05)
     sx, sy = src.geometry().center().x(), src.geometry().center().y()
     user32.SetCursorPos(sx, sy)
-    time.sleep(0.2)
+    for _ in range(6):  # Qt must have handled the move to the source before the press
+        app.processEvents()
+        time.sleep(0.05)
     user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    for _ in range(6):  # ...and the press (it takes the mouse capture), as in a real drag start
+        app.processEvents()
+        time.sleep(0.05)
 
     def drive():
-        time.sleep(0.8)
+        time.sleep(0.5)
         steps = 30
         for i in range(1, steps + 1):
             user32.SetCursorPos(sx + (target[0] - sx) * i // steps, sy + (target[1] - sy) * i // steps)
@@ -498,9 +503,13 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
         l, t, r, b = rect
         grid = [(px, py) for py in range(t + 1, b - 1, 6) for px in range(l + 1, r - 1, 6)]
         roots = [root_at(px, py) for px, py in grid]
-        leaks = [pt for pt, root in zip(grid, roots) if root != zone]
+        leaks = [(pt, root) for pt, root in zip(grid, roots) if root != zone]
+        hit = {}
+        for pt, root in leaks:
+            hit.setdefault(root, []).append(pt)
+        what = "; ".join(f"{len(pts)} -> {api.describe(root)} e.g. {pts[0]}" for root, pts in list(hit.items())[:3])
         expect("zones: every part of the box catches the mouse (nothing falls through)", not leaks,
-               f"{len(grid)} points, {len(leaks)} reached another window" + (f", e.g. {leaks[0]}" if leaks else ""))
+               f"{len(grid)} points, {len(leaks)} reached another window" + (f": {what}" if leaks else ""))
         print_crop("zone-start", zone)
 
         # A real OLE drag offering Copy|Move|Link (Move proposed) must be taken as a Link.
@@ -513,6 +522,12 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
                f"before={before} after={saved_zone(appdata).get('items')}")
         expect("zones: the dropped original is still in its place, unchanged",
                dropped.exists() and dropped.read_text(encoding="utf-8") == "drop me")
+        try:
+            for line in (appdata / "log.txt").read_text(encoding="utf-8", errors="replace").splitlines():
+                if "drag" in line or "drop" in line:
+                    print("  app log: " + line[-220:], flush=True)
+        except OSError:
+            pass
         time.sleep(1.5)
         print_crop("zone-after-drop", zone)
 
@@ -898,6 +913,11 @@ def run(exe: Path, report: Path) -> None:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("exe", type=Path)
     ap.add_argument("--report", type=Path, default=Path("ci-report"))
