@@ -119,7 +119,13 @@ def load_verse_file(path: Path, source: str) -> tuple[dict[str, Verse], list[str
         data = json.loads(text)
     except json.JSONDecodeError as e:
         return {}, [], describe_json_error(path.name, e)
-    entries, warnings = parse_entries(data, source)
+    except (ValueError, RecursionError) as e:  # e.g. a number thousands of digits long
+        return {}, [], f"{path.name}: cannot be read ({type(e).__name__}: {e})"[:300]
+    try:
+        entries, warnings = parse_entries(data, source)
+    except Exception as e:  # an odd entry must never keep the app from starting
+        log.exception("%s: unexpected content", path.name)
+        return {}, [], f"{path.name}: unexpected content ({type(e).__name__})"
     return entries, warnings, None
 
 

@@ -133,3 +133,18 @@ def test_missing_dates_fall_back_without_crashing():
     lib = VerseLibrary(partial)
     assert lib.verse_for(dt.date(2026, 6, 6)).text == "T"
     assert VerseLibrary({}).verse_for(dt.date(2026, 6, 6)).source == "fallback"
+
+
+def test_odd_user_files_are_reported_not_raised(tmp_path):
+    from versedesk.verses import load_verse_file
+
+    cases = {
+        "odd-utf16.json": json.dumps({"verses": [{"date": "1-1", "text": "x"}]}).encode("utf-16") + b"\n",
+        "huge-number.json": ('{"verses": [{"date": "1-1", "text": "x", "n": ' + "9" * 5000 + "}]}").encode(),
+        "nested.json": ("[" * 100_000 + "]" * 100_000).encode(),
+    }
+    for name, raw in cases.items():
+        p = tmp_path / name
+        p.write_bytes(raw)
+        entries, warnings, error = load_verse_file(p, "user")  # must not raise
+        assert error or entries or warnings, name

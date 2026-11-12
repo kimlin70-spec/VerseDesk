@@ -71,6 +71,33 @@ jobs:
           path: ci-report/
           if-no-files-found: ignore
 
+  data:
+    # The embedded verses must be the official BSB text, byte for byte. The publisher replaces
+    # its files in place, so a hash mismatch (new edition) or an outage is a warning, not a
+    # failed build: the shipped data is still the pinned, verified edition.
+    name: verse data equals the official BSB text
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download the pinned official BSB files
+        id: download
+        continue-on-error: true
+        run: python -I tools/bsb.py download
+
+      - name: Warn if the pinned edition could not be downloaded
+        if: steps.download.outcome != 'success'
+        run: echo "::warning::Could not download the pinned BSB edition (site unreachable or a new edition was published). verses.json was not re-checked."
+
+      - name: Rebuild check (versedesk/data/verses.json from bsb.txt)
+        if: steps.download.outcome == 'success'
+        run: python -I tools/build_verses.py --check
+
   release:
     name: publish release (main only)
     needs: windows

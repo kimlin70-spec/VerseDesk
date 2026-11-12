@@ -231,3 +231,53 @@ def test_transiently_locked_file_is_not_treated_as_broken_or_overwritten(tmp_pat
     reloaded = store.poll()  # the lock is gone: the user's settings come back
     assert reloaded is not None and reloaded.error is None
     assert store.settings.verse.font_size == 33 and store.settings.verse.x == 5
+
+
+def test_change_made_while_the_file_was_locked_is_applied_on_top_of_it(tmp_path, monkeypatch):
+    """The lock clears just as the user drags the verse: the drag must win, and the
+    user's other settings must be kept (not replaced by defaults)."""
+    from pathlib import Path
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"verse": {"font_size": 33, "x": 100, "y": 6}}), encoding="utf-8")
+    real_read = Path.read_bytes
+    locked = {"on": True}
+
+    def flaky(self):
+        if self == path and locked["on"]:
+            raise PermissionError("in use by another process")
+        return real_read(self)
+
+    monkeypatch.setattr(Path, "read_bytes", flaky)
+    store = SettingsStore(path)
+    assert store.load().unreadable
+    monkeypatch.setattr(store, "changed_on_disk", lambda: False)  # poll() sees nothing new
+    locked["on"] = False
+    store.update(lambda s: setattr(s.verse, "x", 500))
+    assert store.settings.verse.x == 500 and store.settings.verse.font_size == 33
+    on_disk = json.loads(real_read(path))["verse"]
+    assert on_disk["x"] == 500 and on_disk["font_size"] == 33
+
+
+def test_absurd_numbers_never_stop_the_app(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text('{"verse": {"font_size": ' + "9" * 400 + "}}", encoding="utf-8")
+    r = SettingsStore(path).load()  # an int too large for float: a warning, not a crash
+    assert r.error is None and r.settings.verse.font_size == VerseSettings().font_size and r.warnings
+    path.write_text('{"verse": {"font_size": ' + "9" * 5000 + "}}", encoding="utf-8")
+    r = SettingsStore(path).load()  # beyond Python's int digit limit: treated as a format error
+    assert r.error and r.settings == Settings()
+
+
+def test_deeply_nested_json_is_a_format_error_not_a_crash(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text("[" * 100_000 + "]" * 100_000, encoding="utf-8")
+    r = SettingsStore(path).load()
+    assert r.error and r.settings == Settings()
+
+
+def test_utf16_file_with_a_stray_odd_byte_does_not_stop_the_app(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_bytes(json.dumps({"verse": {"font_size": 28}}).encode("utf-16") + b"\n")
+    r = SettingsStore(path).load()
+    assert r.settings.verse.font_size in (28, VerseSettings().font_size)  # read, or reported

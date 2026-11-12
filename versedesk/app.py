@@ -199,6 +199,7 @@ class VerseDeskApp(QObject):
 
     # ------------------------------------------------------------------ verses
 
+    @safe
     def _load_user_verses(self, initial: bool = False) -> bool:
         """(Re)load %APPDATA%\\VerseDesk\\verses.json. Returns True if the overrides changed."""
         sig = _file_sig(self.user_verses_path)

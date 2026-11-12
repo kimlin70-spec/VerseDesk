@@ -88,7 +88,11 @@ def _num(v: Any) -> float | None:
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)):
-        return float(v) if v == v else None  # v == v rejects NaN
+        try:
+            f = float(v)
+        except OverflowError:  # an integer with hundreds of digits
+            return None
+        return f if f == f else None  # f == f rejects NaN
     if isinstance(v, str):
         try:
             f = float(v.strip())
@@ -237,7 +241,7 @@ def decode_text(raw: bytes) -> str:
     """Decode a file the user may have saved with Notepad or PowerShell:
     UTF-8 (with or without BOM), UTF-16 (with BOM, or BOM-less ASCII-range text) or ANSI."""
     if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
-        return raw.decode("utf-16")
+        return raw.decode("utf-16", errors="replace")  # a stray odd byte must not stop the app
     if len(raw) >= 4 and raw[1] == 0 and raw[3] == 0 and raw[0] != 0:
         try:
             return raw.decode("utf-16-le")
@@ -355,7 +359,8 @@ class SettingsStore:
                 break
             except OSError as e:
                 last_err = e
-                time.sleep(0.15 * (attempt + 1))
+                if attempt < 2:
+                    time.sleep(0.15 * (attempt + 1))
         if raw is None:
             self._unreadable = True
             self._sig, self._digest = None, None  # keep trying on every poll
@@ -366,7 +371,15 @@ class SettingsStore:
         except json.JSONDecodeError as e:
             self._broken_sig = sig
             return LoadResult(Settings(), error=describe_json_error("settings.json", e))
-        settings, warnings = settings_from_dict(data, previous)
+        except (ValueError, RecursionError) as e:  # e.g. a number thousands of digits long
+            self._broken_sig = sig
+            return LoadResult(Settings(), error=f"settings.json: cannot be read ({type(e).__name__}: {e})"[:300])
+        try:
+            settings, warnings = settings_from_dict(data, previous)
+        except Exception as e:  # an odd value must never keep the app from starting
+            log.exception("settings.json: unexpected content")
+            self._broken_sig = sig
+            return LoadResult(Settings(), error=f"settings.json: unexpected content ({type(e).__name__})")
         self._sig = sig
         self._digest = hashlib.sha256(raw).hexdigest()
         self._broken_sig = None
@@ -414,13 +427,10 @@ class SettingsStore:
 
     def save(self) -> bool:
         if self._unreadable and self.path.exists():
-            # Never replace a file we have not been able to read: it holds the user's settings.
-            result = self._read(previous=self.settings)
-            if result.unreadable:
-                log.error("settings.json still cannot be opened; not saving over it")
-                return False
-            if result.error is None:
-                self.settings = result.settings.copy()
+            # Never replace a file we have not been able to read: it holds the user's settings
+            # (update() re-reads it first; poll() picks it up once it can be opened).
+            log.error("settings.json still cannot be opened; not saving over it")
+            return False
         try:
             if self._broken_sig is not None and _stat_signature(self.path) == self._broken_sig:
                 self._backup_broken()
@@ -437,6 +447,13 @@ class SettingsStore:
     def update(self, mutate: Callable[[Settings], None]) -> LoadResult | None:
         """Apply ``mutate`` and save. Returns the reload result if outside edits were picked up."""
         reloaded = self.poll()
+        if self._unreadable and self.path.exists():
+            # Could not be opened so far: read it now, before the change, so the change is
+            # applied on top of the user's real settings rather than replacing them later.
+            result = self._read(previous=self.settings)
+            if result.error is None:
+                self.settings = result.settings.copy()
+                reloaded = result
         mutate(self.settings)
         self.save()
         return reloaded
