@@ -26,6 +26,7 @@ from versedesk.ui.tray import TrayController
 from versedesk.ui.verse_widget import VerseAppearance, VerseWidget
 from versedesk.verses import Verse, VerseLibrary, date_key, load_embedded, load_verse_file
 from versedesk.version import version_string
+from versedesk.zone_manager import ZoneManager
 
 log = logging.getLogger("versedesk.app")
 
@@ -108,11 +109,24 @@ class VerseDeskApp(QObject):
         self.verse_widget.stray_click.connect(self._on_stray_click)
         self._last_stray_log = -1e9
 
-        self.tray = TrayController(app_icon(), autostart_supported=self.autostart.supported, parent=self)
+        self.tray = TrayController(
+            app_icon(), autostart_supported=self.autostart.supported, zones_available=True, parent=self
+        )
         self.tray.edit_mode_toggled.connect(self.set_edit_mode)
         self.tray.autostart_toggled.connect(self.set_autostart)
         self.tray.open_folder_requested.connect(self.open_data_folder)
         self.tray.quit_requested.connect(self.quit)
+
+        # folder zones
+        self.zones = ZoneManager(
+            store,
+            self.layer,
+            notify=self.tray.notify,
+            screen_rects=self._screen_rects,
+            apply_reload=self._apply_reload,
+            parent=self,
+        )
+        self.tray.add_zone_requested.connect(self._add_zone)
 
         # timers
         self.day_watch = DayWatcher(self._on_date_changed, today=today)
@@ -158,6 +172,7 @@ class VerseDeskApp(QObject):
         self._position_verse()  # before the first show, so it appears in the right place
         self.layer.attach(self.verse_widget, click_through=True)
         self.verse_widget.show()
+        self.zones.start()
         self.layer.start()
 
         self.day_watch.start()
@@ -182,6 +197,7 @@ class VerseDeskApp(QObject):
         self.day_watch.stop()
         self._poll.stop()
         self.layer.stop()
+        self.zones.stop()
         self.tray.hide()
         self.verse_widget.hide()
         self.qapp.quit()
@@ -198,6 +214,7 @@ class VerseDeskApp(QObject):
             )
         g = self.verse_widget.geometry()
         lines.append(f"verse widget at {g.getRect()} on screen {self.verse_widget.screen().name()!r}")
+        lines.append(self.zones.diagnostics())
         lines.append(self.layer.diagnostics())
         log.info("\n".join(lines))
 
@@ -332,6 +349,7 @@ class VerseDeskApp(QObject):
             # Qt destroys a window whose last screen disappeared (e.g. remote desktop); bring it back
             log.info("verse window was hidden by a screen change; showing it again")
             self.verse_widget.show()
+        self.zones.reposition()
         self.layer.request_sync()
 
     # ------------------------------------------------------------------ edit mode, autostart, folder
@@ -341,8 +359,13 @@ class VerseDeskApp(QObject):
         self.edit_mode = on
         self.verse_widget.set_edit_mode(on)
         self.layer.set_click_through(self.verse_widget, not on)
+        self.zones.set_edit_mode(on)
         self.tray.set_edit_mode(on)
         log.info("edit mode %s", "on" if on else "off")
+
+    @safe
+    def _add_zone(self) -> None:
+        self.zones.add_zone()
 
     @safe
     def set_autostart(self, on: bool) -> None:
@@ -402,3 +425,4 @@ class VerseDeskApp(QObject):
             log.info("desktop_mode=%s takes effect after a restart", s.desktop_mode)
         if self.autostart.supported and s.autostart != self.autostart.is_enabled():
             self.tray.set_autostart_checked(self.autostart.sync_at_startup(s.autostart))
+        self.zones.sync_from_settings()

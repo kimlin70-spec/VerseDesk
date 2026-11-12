@@ -18,10 +18,11 @@ File layout (all keys optional; anything missing or invalid falls back to the de
         "color": "#FFFFFF",
         "shadow": true,
         "align": "right"               # left | center | right
-      }
+      },
+      "zones": [ ... ]                 # folder zones, see versedesk/zones.py
     }
 
-Unknown top-level keys (for example "zones" written by a newer version) are kept as-is.
+Unknown top-level keys (for example ones written by a newer version) are kept as-is.
 """
 
 from __future__ import annotations
@@ -36,6 +37,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+
+from versedesk.zones import Zone, zones_from_list, zones_to_list
 
 log = logging.getLogger("versedesk.settings")
 
@@ -74,6 +77,7 @@ class Settings:
     desktop_mode: str = "bottom"
     debug_log: bool = False
     verse: VerseSettings = field(default_factory=VerseSettings)
+    zones: list[Zone] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)  # unknown keys, preserved verbatim
 
     def copy(self) -> "Settings":
@@ -134,7 +138,7 @@ def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Set
         warnings.append("settings.json top level is not an object; keeping the previous settings")
         return prev, warnings
 
-    known = {"version", "autostart", "desktop_mode", "debug_log", "verse"}
+    known = {"version", "autostart", "desktop_mode", "debug_log", "verse", "zones"}
     s.extra = {k: copy.deepcopy(v) for k, v in data.items() if k not in known}
 
     if "autostart" in data:
@@ -197,6 +201,14 @@ def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Set
     take("color", lambda a: a if isinstance(a, str) and _COLOR_RE.match(a) else None, "must look like #FFFFFF")
     take("shadow", lambda a: a if isinstance(a, bool) else None, "must be true or false")
     take("align", lambda a: a if a in ALIGN_CHOICES else None, f"must be one of {ALIGN_CHOICES}")
+
+    if "zones" in data:
+        if isinstance(data["zones"], list):
+            s.zones, zone_warnings = zones_from_list(data["zones"])
+            warnings.extend(zone_warnings)
+        else:
+            s.zones = [z.copy() for z in prev.zones]
+            warnings.append("zones must be a list; keeping the previous zones")
     return s, warnings
 
 
@@ -224,6 +236,7 @@ def settings_to_dict(s: Settings) -> dict[str, Any]:
             "shadow": vs.shadow,
             "align": vs.align,
         },
+        "zones": zones_to_list(s.zones),
     }
     for k, val in s.extra.items():
         out.setdefault(k, copy.deepcopy(val))

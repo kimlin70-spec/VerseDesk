@@ -29,7 +29,10 @@ def test_round_trip_preserves_everything_including_unknown_keys():
         "debug_log": True,
         "verse": {"x": -1200, "y": 35, "width": 600, "font_family": "Segoe UI", "font_size": 18.5,
                   "reference_font_size": 12, "color": "#FFEEDD", "shadow": False, "align": "left"},
-        "zones": [{"name": "Work", "items": ["C:\\\\Docs"]}],
+        "zones": [{"id": "z1", "name": "Work", "x": 10, "y": 20, "width": 300, "height": 200,
+                   "collapsed": True, "items": ["C:\\Docs", "\\\\server\\share\\plan.xlsx"],
+                   "color": "#112233"}],
+        "future_feature": {"enabled": True, "list": [1, 2]},
     }
     s, warnings = settings_from_dict(data)
     assert warnings == []

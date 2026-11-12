@@ -12,7 +12,8 @@ log = logging.getLogger("versedesk.ui.tray")
 
 TEXT_EDIT_ON = "배치 편집 켜기"
 TEXT_EDIT_OFF = "배치 편집 끄기 (위치 저장됨)"
-TEXT_ADD_ZONE = "새 구역 추가 (다음 단계에서 제공)"
+TEXT_ADD_ZONE = "새 구역 추가"
+TEXT_ADD_ZONE_LATER = "새 구역 추가 (다음 단계에서 제공)"
 TEXT_AUTOSTART = "Windows 시작 시 자동 실행"
 TEXT_AUTOSTART_DEV = "Windows 시작 시 자동 실행 (exe에서만 가능)"
 TEXT_OPEN_FOLDER = "설정·로그 폴더 열기"
@@ -36,7 +37,7 @@ class TrayController(QObject):
         self.act_edit.triggered.connect(lambda: self.edit_mode_toggled.emit(not self._edit))
         self.menu.addAction(self.act_edit)
 
-        self.act_zone = QAction(TEXT_ADD_ZONE if not zones_available else "새 구역 추가", self.menu)
+        self.act_zone = QAction(TEXT_ADD_ZONE if zones_available else TEXT_ADD_ZONE_LATER, self.menu)
         self.act_zone.setEnabled(zones_available)
         self.act_zone.triggered.connect(self.add_zone_requested.emit)
         self.menu.addAction(self.act_zone)
