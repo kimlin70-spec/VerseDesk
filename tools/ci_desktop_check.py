@@ -342,23 +342,35 @@ def check_click_through(verse: int, label: str, background: tuple[int, int, int]
         record(name, "WARN", "inconclusive (no drawn pixel sampled): " + detail)
         return
     # Control: without WS_EX_TRANSPARENT the drawn pixels must be hit, or the test proves nothing.
+    # The app re-applies its styles on every keeper tick (150 ms while the desktop is shown),
+    # so sample right after removing the flag and retry if the app put it back mid-sample.
     ex = api.ex_style(verse)
-    hits, sample = 0, painted_below[:: max(1, len(painted_below) // 200)]
+    sample = painted_below[:: max(1, len(painted_below) // 60)]
+    hits, valid, healed = 0, False, None
     try:
+        for _attempt in range(8):
+            api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex & ~api.WS_EX_TRANSPARENT)
+            if api.ex_style(verse) & api.WS_EX_TRANSPARENT:
+                continue  # could not change it (or it was restored at once)
+            hits = sum(1 for pt in sample if root_at(*pt) == verse)
+            if not api.ex_style(verse) & api.WS_EX_TRANSPARENT:
+                valid = True  # the flag stayed off during the whole sample
+                break
+        # Leave it off: the app must restore click-through by itself within a tick or two.
         api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex & ~api.WS_EX_TRANSPARENT)
-        time.sleep(0.3)
-        hits = sum(1 for pt in sample if root_at(*pt) == verse)
+        time.sleep(1.0)
+        healed = bool(api.ex_style(verse) & api.WS_EX_TRANSPARENT)
     finally:
-        api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex)
-        time.sleep(0.3)
-    detail += f"; control without WS_EX_TRANSPARENT: {hits} of {len(sample)} drawn points hit the verse"
-    restored = api.ex_style(verse) == ex
-    if not restored:
-        record(name, "FAIL", detail + "; the window style could not be restored")
-    elif hits:
+        if not api.ex_style(verse) & api.WS_EX_TRANSPARENT:
+            api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex)
+    expect("the app restores click-through if another program removes it", bool(healed),
+           "WS_EX_TRANSPARENT back within 1 s" if healed else "still missing after 1 s", warn_only=True)
+    detail += (f"; control with WS_EX_TRANSPARENT removed: {hits} of {len(sample)} drawn points hit the verse"
+               if valid else "; control could not be run (the style did not stay off)")
+    if valid and hits:
         record(name, "PASS", detail)
     else:
-        record(name, "WARN", "inconclusive (the control could not hit the verse): " + detail)
+        record(name, "WARN", "inconclusive: " + detail)
 
 
 def run(exe: Path, report: Path) -> None:
