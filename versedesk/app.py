@@ -25,7 +25,7 @@ from versedesk.settings import LoadResult, SettingsStore, atomic_write_text
 from versedesk.ui.icon import app_icon
 from versedesk.ui.tray import TrayController
 from versedesk.ui.verse_widget import VerseAppearance, VerseWidget
-from versedesk.verses import FALLBACK, Verse, list_document, load_builtin, load_verse_file
+from versedesk.verses import FALLBACK, MAX_TEXT_CHARS, Verse, list_document, load_builtin, load_verse_file
 from versedesk.version import version_string
 from versedesk.zone_manager import ZoneManager
 
@@ -33,6 +33,7 @@ log = logging.getLogger("versedesk.app")
 
 POLL_FILES_MS = 2000
 PREVIOUS_LIST_NAME = "verses.previous.json"  # the list as it was before the last editor session
+RETRY_SIG = (-1, -1)  # "read verses.json again at the next poll" (never a real signature, never None)
 SCREEN_DEBOUNCE_MS = 600
 STRAY_CLICK_LOG_INTERVAL_S = 10.0
 DEFAULT_MARGIN_X = 40
@@ -64,6 +65,16 @@ def _file_sig(path: Path) -> tuple[int, int] | None:
 def _warnings_notice(warnings: list[str]) -> str:
     keys = ", ".join(dict.fromkeys(w.split(" ", 1)[0] for w in warnings))
     return f"settings.json의 일부 값이 올바르지 않아 적용하지 않았습니다: {keys}. 자세한 내용은 log.txt에 있습니다."
+
+
+def copy_contents(src: Path, dst: Path) -> None:
+    """Copy the bytes only (not the read-only flag or other attributes, which shutil.copy2
+    carries over on Windows and which would then block the next copy onto ``dst``)."""
+    tmp = dst.with_name(dst.name + ".tmp")
+    shutil.copyfile(src, tmp)
+    if dst.exists():
+        os.chmod(dst, 0o666)  # clears the Windows read-only flag so it can be replaced
+    os.replace(tmp, dst)
 
 
 def _to_rect(qrect) -> Rect:
@@ -256,14 +267,15 @@ class VerseDeskApp(QObject):
         self._verses_sig = sig
         if sig is None:
             self._verses_ok_sig = None
+            self._verses_unreadable = False
             if self.user_list is not None:
                 log.info("user verses.json removed; using the built-in list")
                 self.user_list = None
                 return True
             return False
-        result = load_verse_file(self.user_verses_path, "user")
+        result = load_verse_file(self.user_verses_path, "user", attempts=3 if initial else 1)
         if result.unreadable:
-            self._verses_sig = None  # try again at the next poll
+            self._verses_sig = RETRY_SIG  # try again at the next poll (a deletion is still noticed)
             if not self._verses_unreadable:
                 self._verses_unreadable = True
                 log.warning("user verses: %s — will retry", result.error)
@@ -294,12 +306,21 @@ class VerseDeskApp(QObject):
         self._verses_error_sig = None
         for w in result.warnings:
             log.warning("user verses: %s", w)
-        if result.warnings and not initial:
-            self.tray.notify("verses.json", f"{len(result.warnings)}개 항목을 건너뛰었습니다. log.txt에 이유가 있습니다.",
-                             warning=True)
+        if result.skipped or result.cut:
+            what = []
+            if result.skipped:
+                what.append(f"{result.skipped}개 항목을 건너뛰었습니다")
+            if result.cut:
+                what.append(f"{result.cut}개 본문이 너무 길어 {MAX_TEXT_CHARS}자에서 잘랐습니다")
+            self.tray.notify(
+                "verses.json",
+                " / ".join(what) + ". (자세한 내용은 log.txt에 있고, 말씀 목록 편집에서 고치면 원래 파일은 따로 보관됩니다.)",
+                warning=True,
+            )
         log.info("user verse list: %d verses", len(result.verses))
         self.user_list = result.verses
-        self._verses_ok_sig = sig
+        # a file read only in part is not "ours": the editor keeps a copy before writing over it
+        self._verses_ok_sig = sig if not result.warnings else None
         return True
 
     def _retire_dated_file(self) -> None:
@@ -392,9 +413,14 @@ class VerseDeskApp(QObject):
             current = _file_sig(path)
             if current is not None and current != self._verses_ok_sig:
                 kept = self._backup_path()
-                shutil.copy2(path, kept)
+                shutil.copyfile(path, kept)
             elif current is not None and not self._editor_saved:
-                shutil.copy2(path, path.with_name(PREVIOUS_LIST_NAME))
+                try:
+                    copy_contents(path, path.with_name(PREVIOUS_LIST_NAME))
+                except OSError as e:  # never let the spare copy block the user's save
+                    kept = self._backup_path()
+                    log.warning("could not update %s (%s); keeping %s instead", PREVIOUS_LIST_NAME, e, kept.name)
+                    shutil.copyfile(path, kept)
             atomic_write_text(path, list_document(verses))
         except OSError:
             log.exception("could not save the verse list")

@@ -364,7 +364,10 @@ class VerseEditor(QWidget):
             self._say(" / ".join(problems), "error")
 
     def _rebuild(self, items: list[QTreeWidgetItem]) -> None:
-        """Replace the rows without a flurry of selection changes in between."""
+        """Replace the rows without a flurry of selection changes in between, and without
+        the list jumping back to the top (emptying it resets the scroll bar)."""
+        bar = self.tree.verticalScrollBar()
+        scrolled = bar.value()
         was = self.tree.blockSignals(True)
         try:
             while self.tree.topLevelItemCount():
@@ -373,6 +376,8 @@ class VerseEditor(QWidget):
                 self.tree.addTopLevelItem(item)
         finally:
             self.tree.blockSignals(was)
+        self.tree.doItemsLayout()  # the scroll range is back before the old position is set
+        bar.setValue(scrolled)
 
     def delete_selected(self) -> None:
         rows = self._selected_rows()

@@ -32,6 +32,7 @@ def test_invalid_entries_are_skipped_with_warnings():
     assert len(r.warnings) == 4 and r.error is None
     assert r.verses[0] == Verse("", "Bad reference is dropped, text kept.", "user")
     assert len(r.verses[1].text) == 3000 and "was cut" in r.warnings[-1]
+    assert (r.skipped, r.cut) == (3, 1)
 
 
 def test_wrong_top_level_shape_is_an_error():
@@ -73,8 +74,10 @@ def test_a_locked_file_is_reported_as_unreadable_not_broken(tmp_path, monkeypatc
 
     monkeypatch.setattr(verses_module, "read_text_lenient", locked)
     monkeypatch.setattr(verses_module.time, "sleep", lambda s: None)
-    r = load_verse_file(p, "user")
+    r = load_verse_file(p, "user", attempts=3)
     assert r.unreadable and r.error and r.verses == [] and len(calls) == 3  # tried three times
+    calls.clear()
+    assert load_verse_file(p, "user").unreadable and len(calls) == 1  # the poll tries once, no pause
 
 
 def test_json_errors_are_reported_with_their_position(tmp_path):

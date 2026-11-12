@@ -3,6 +3,7 @@
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QAbstractItemView
 
 from versedesk.bible import Bible
 from versedesk.ui.verse_editor import VerseEditor
@@ -233,4 +234,24 @@ def test_the_window_fits_a_small_screen(qapp):
     ed = VerseEditor(_list(), 120, load_bible=_bible)
     area = ed.screen().availableGeometry()
     assert ed.width() <= max(360, area.width() - 40) and ed.height() <= max(300, area.height() - 100)
+    ed.close()
+
+
+def test_deleting_or_moving_does_not_make_a_scrolled_list_jump(qapp):
+    ed = VerseEditor(_list(60), 120, load_bible=_bible)
+    ed.resize(640, 420)
+    ed.show()
+    qapp.processEvents()
+    bar = ed.tree.verticalScrollBar()
+    ed.tree.scrollToItem(ed.tree.topLevelItem(19), QAbstractItemView.ScrollHint.PositionAtTop)
+    qapp.processEvents()
+    top = bar.value()
+    assert top > 0
+    ed._select_rows([20])
+    ed.delete_selected()
+    qapp.processEvents()
+    assert bar.value() == top
+    ed.move_selected(-1)
+    qapp.processEvents()
+    assert bar.value() == top
     ed.close()

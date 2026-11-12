@@ -67,6 +67,8 @@ class VerseFile:
     error: str | None = None  # the whole file is unusable
     dated: bool = False  # the old one-verse-per-calendar-day format
     unreadable: bool = False  # could not be opened (e.g. another program had it locked): try again
+    skipped: int = 0  # entries left out (no text, not an object, over MAX_VERSES)
+    cut: int = 0  # texts shortened to MAX_TEXT_CHARS
 
 
 def _clean(value: Any, limit: int) -> str | None:
@@ -93,30 +95,37 @@ def parse_list(data: Any, source: str) -> VerseFile:
     for i, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             out.warnings.append(f"entry #{i}: not an object, skipped")
+            out.skipped += 1
             continue
         text = _clean(item.get("text"), MAX_TEXT_CHARS)
         if text is None:
             out.warnings.append(f"entry #{i}: missing \"text\", skipped")
+            out.skipped += 1
             continue
-        if len(text) == MAX_TEXT_CHARS and len(" ".join(str(item.get("text")).split())) > MAX_TEXT_CHARS:
-            out.warnings.append(f"entry #{i}: text longer than {MAX_TEXT_CHARS} characters was cut")
         if len(out.verses) >= MAX_VERSES:
             out.warnings.append(f"only the first {MAX_VERSES} verses are used")
+            out.skipped += len(items) - i + 1
             break
+        if len(text) == MAX_TEXT_CHARS and len(" ".join(str(item.get("text")).split())) > MAX_TEXT_CHARS:
+            out.warnings.append(f"entry #{i}: text longer than {MAX_TEXT_CHARS} characters was cut")
+            out.cut += 1
         out.verses.append(Verse(_clean(item.get("reference"), MAX_REFERENCE_CHARS) or "", text, source))
     return out
 
 
-def load_verse_file(path: Path, source: str) -> VerseFile:
+def load_verse_file(path: Path, source: str, attempts: int = 1) -> VerseFile:
+    """``attempts`` > 1 retries a file that cannot be opened (antivirus, backup or sync tools
+    may hold it briefly) with short pauses; the 2-second poll passes 1 and is itself the retry,
+    so a file that stays locked never stalls the program."""
     text: str | None = None
     last_err: OSError | None = None
-    for attempt in range(3):  # antivirus, backup or sync tools may hold the file briefly
+    for attempt in range(max(1, attempts)):
         try:
             text = read_text_lenient(path)
             break
         except OSError as e:
             last_err = e
-            if attempt < 2:
+            if attempt < attempts - 1:
                 time.sleep(0.15 * (attempt + 1))
     if text is None:
         return VerseFile(error=f"{path.name}: cannot open the file: {last_err}", unreadable=True)

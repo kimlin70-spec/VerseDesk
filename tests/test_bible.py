@@ -147,6 +147,25 @@ def test_several_references_at_once():
     assert split_references(" , ") == []
 
 
+def test_notes_in_brackets_keep_their_separators():
+    assert split_references("요 3:16 (개역개정/새번역)") == ["요 3:16 (개역개정/새번역)"]
+    assert split_references("John 3:16 (NIV/ESV), Rom 8:28") == ["John 3:16 (NIV/ESV)", "Rom 8:28"]
+    assert split_references("(롬 8:28, 요 3:16)") == ["롬 8:28", "요 3:16"]
+    assert split_references("(롬 8:28), (요 3:16)") == ["(롬 8:28)", "(요 3:16)"]
+    assert split_references("요 3:16 (not closed, 롬 8:28") == ["요 3:16 (not closed", "롬 8:28"]
+
+
+@pytest.mark.parametrize("typed, says", [
+    ("고후 13:14", "고린도후서 13장은 13절까지 있습니다(한글 성경)"),
+    ("요삼 1:16", "요한삼서 1장은 15절까지 있습니다(한글 성경)"),
+])
+def test_korean_verse_counts_where_they_differ(typed, says):
+    with pytest.raises(ReferenceProblem) as e:
+        parse_reference(typed)
+    assert says in str(e.value)
+    assert parse_reference("2 Cor 13:14").last == 14  # English numbers are BSB's
+
+
 def test_korean_numbering_is_noted():
     ref = parse_reference("고후 13:13")
     assert (ref.first, ref.last, ref.note) == (14, 14, "한글 성경 고후 13:13")

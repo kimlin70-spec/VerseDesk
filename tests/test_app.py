@@ -483,3 +483,83 @@ def test_the_open_editor_follows_an_interval_changed_in_settings_json(qapp, home
         assert reported == []  # shown, not sent back as a new choice
     finally:
         shutdown(app)
+
+
+def test_a_list_read_only_in_part_is_kept_before_the_editor_saves(qapp, home, embedded, monkeypatch):
+    """Entries the app had to skip or cut exist only in the user's file: copy it aside first."""
+    from versedesk import paths
+    from versedesk.ui.tray import TrayController
+
+    notices = []
+    monkeypatch.setattr(TrayController, "notify", lambda self, title, msg, warning=False, msecs=8000: notices.append(msg))
+    home.mkdir(parents=True, exist_ok=True)
+    path = paths.user_verses_path()
+    original = json.dumps({"verses": [{"reference": "Mine 1:1", "text": "Kept."},
+                                      {"reference": "Typo", "txt": "Be still, and know."},
+                                      {"reference": "Long", "text": "x " * 2000}]})
+    path.write_text(original, encoding="utf-8")
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        assert [v.reference for v in app.user_list] == ["Mine 1:1", "Long"]
+        assert any("1개 항목을 건너뛰었습니다" in n and "1개 본문이" in n for n in notices)  # said at startup
+        app.open_verse_editor()
+        app._editor._select_rows([0])
+        app._editor.move_selected(1)
+        backups = list(home.glob("verses.backup-*.json"))
+        assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == original
+    finally:
+        shutdown(app)
+
+
+def test_deleting_a_list_that_could_not_be_opened_is_still_noticed(qapp, home, embedded, monkeypatch):
+    import versedesk.verses as verses_module
+    from versedesk import paths
+
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        path = paths.user_verses_path()
+        path.write_text(json.dumps({"verses": [{"reference": "Mine 1:1", "text": "Mine."}]}), encoding="utf-8")
+        app._poll_files()
+        assert app.verse_widget.text == "Mine."
+        original = verses_module.read_text_lenient
+        monkeypatch.setattr(verses_module, "read_text_lenient", lambda p: (_ for _ in ()).throw(PermissionError("locked")))
+        sleeps = []
+        monkeypatch.setattr(verses_module.time, "sleep", sleeps.append)
+        path.write_text(json.dumps({"verses": [{"text": "Changed."}]}), encoding="utf-8")
+        _touch_later(path)
+        app._poll_files()  # locked: keep what is shown, try again later...
+        assert sleeps == []  # ...without pausing the program at every poll
+        monkeypatch.setattr(verses_module, "read_text_lenient", original)
+        path.unlink()
+        app._poll_files()
+        assert app.user_list is None and app.verse_widget.text.startswith("Verse number")
+    finally:
+        shutdown(app)
+
+
+def test_a_read_only_spare_copy_does_not_block_saving(qapp, home, embedded):
+    import os
+    import stat
+
+    from versedesk import paths
+
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        app.open_verse_editor()
+        app._editor._select_rows([0])
+        app._editor.delete_selected()  # our own verses.json now exists
+        app._editor.close()
+        qapp.processEvents()
+        previous = home / "verses.previous.json"
+        previous.write_text("old spare copy", encoding="utf-8")
+        os.chmod(previous, stat.S_IREAD)  # e.g. copied from a read-only verses.json
+        app.open_verse_editor()
+        app._editor._select_rows([0])
+        app._editor.delete_selected()
+        assert "저장하지 못했습니다" not in app._editor.count_label.text()
+        assert previous.read_text(encoding="utf-8") != "old spare copy"
+        assert os.stat(previous).st_mode & stat.S_IWRITE  # the new copy does not inherit read-only
+        saved = json.loads(paths.user_verses_path().read_text(encoding="utf-8"))["verses"]
+        assert len(saved) == _builtin_count(app) - 2
+    finally:
+        shutdown(app)

@@ -229,6 +229,7 @@ KOREAN_NUMBERING = {
     ("2 Corinthians", 13): {12: (12, 13), 13: (14, 14)},
     ("3 John", 1): {15: (14, 14)},
 }
+KOREAN_LAST_VERSE = {("2 Corinthians", 13): 13, ("3 John", 1): 15}  # where the Korean count differs
 
 
 def korean_to_bsb(book: str, chapter: int, first: int, last: int) -> tuple[int, int]:
@@ -309,6 +310,10 @@ def parse_reference(text: str) -> Reference:
         raise ReferenceProblem(f"한 번에 {MAX_PASSAGE_VERSES}절까지 넣을 수 있습니다.")
     note = ""
     if _HANGUL.search(book_text):
+        korean_last = KOREAN_LAST_VERSE.get((book, chapter))
+        if korean_last is not None and last > korean_last:
+            where = f"{BOOKS_BY_NAME[book].korean_name} {chapter}장"
+            raise ReferenceProblem(f"{_korean_particle(where, '은', '는')} {korean_last}절까지 있습니다(한글 성경).")
         bsb_first, bsb_last = korean_to_bsb(book, chapter, first, last)
         if (bsb_first, bsb_last) != (first, last):
             typed = str(first) if first == last else f"{first}-{last}"
@@ -317,9 +322,53 @@ def parse_reference(text: str) -> Reference:
     return Reference(book, chapter, first, last, note)
 
 
+_SEPARATORS = set(",;，；、·・/\n\r")
+_BRACKETS = {"(": ")", "[": "]", "{": "}", "（": "）", "［": "］", "「": "」", "『": "』", "《": "》", "〈": "〉", "【": "】"}
+
+
+def _split(text: str, mind_brackets: bool) -> tuple[list[str], bool]:
+    """Split at separators outside brackets. Returns (pieces, brackets balanced)."""
+    pieces, current, closers = [], [], []
+    for ch in text:
+        if mind_brackets and ch in _BRACKETS:
+            closers.append(_BRACKETS[ch])
+        elif mind_brackets and closers and ch == closers[-1]:
+            closers.pop()
+        elif ch in _SEPARATORS and not closers:
+            pieces.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    pieces.append("".join(current))
+    return pieces, not closers
+
+
+def _without_enclosing_brackets(text: str) -> str:
+    """'(롬 8:28, 요 3:16)' -> '롬 8:28, 요 3:16', but '(롬 8:28), (요 3:16)' is left as it is."""
+    s = text.strip()
+    while len(s) >= 2 and s[0] in _BRACKETS:
+        closers = []
+        for i, ch in enumerate(s):
+            if ch in _BRACKETS:
+                closers.append(_BRACKETS[ch])
+            elif closers and ch == closers[-1]:
+                closers.pop()
+                if not closers:
+                    break
+        if closers or i != len(s) - 1:  # unbalanced, or the first bracket closes before the end
+            return s
+        s = s[1:-1].strip()
+    return s
+
+
 def split_references(text: str) -> list[str]:
-    """Several references typed or pasted at once: '요 3:16, 롬 8:28; 시 23:1 / 창 1:1'."""
-    return [p.strip() for p in re.split(r"[,;，；、·・/\n\r]+", text or "") if p.strip()]
+    """Several references typed or pasted at once: '요 3:16, 롬 8:28; 시 23:1 / 창 1:1'.
+    Separators inside brackets belong to a note: '요 3:16 (개역개정/새번역)' stays one piece."""
+    s = _without_enclosing_brackets(text or "")
+    pieces, balanced = _split(s, mind_brackets=True)
+    if not balanced:  # a bracket that never closes must not swallow the rest
+        pieces, _ = _split(s, mind_brackets=False)
+    return [p.strip() for p in pieces if p.strip()]
 
 
 class Bible:
