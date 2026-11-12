@@ -123,7 +123,9 @@ def _adopt_previous_crash(crash_file: Path) -> None:
         if crash_file.is_file() and crash_file.stat().st_size > 0:
             text = crash_file.read_text(encoding="utf-8", errors="replace").strip()
             if text:
-                log.error("The previous run ended with a fatal error:\n%s", text[-8000:])
+                # On Windows faulthandler also records native exceptions that were handled,
+                # so this is a hint for diagnosis, not proof of a crash.
+                log.warning("faulthandler output from the previous run:\n%s", text[-8000:])
     except OSError:
         pass
 
