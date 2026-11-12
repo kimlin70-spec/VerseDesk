@@ -16,9 +16,15 @@ concurrency:
 
 jobs:
   windows:
-    name: test, build exe, check on a real desktop
-    runs-on: windows-latest
+    name: test, build exe, check on a real desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-latest has the Windows 11 24H2-style desktop; windows-2022 the older
+        # Windows 10 / Windows 11 up to 23H2 style (the desktop is "split" into a WorkerW).
+        os: [windows-latest, windows-2022]
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +53,7 @@ jobs:
         run: "'{0:N1} MB' -f ((Get-Item dist/VerseDesk.exe).Length / 1MB)"
 
       - name: Upload exe
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: VerseDesk-exe
@@ -60,7 +67,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-report
+          name: ci-report-${{ matrix.os }}
           path: ci-report/
           if-no-files-found: ignore
 

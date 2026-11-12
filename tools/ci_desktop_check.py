@@ -142,6 +142,39 @@ def screenshot(report: Path, name: str) -> None:
         print(f"  screenshot {name} failed: {e}", flush=True)
 
 
+def set_desktop_color(rgb: tuple[int, int, int]) -> None:
+    """Plain-colour desktop background (no wallpaper) so text legibility can be judged."""
+    SPI_SETDESKWALLPAPER, SPIF_SENDCHANGE, COLOR_DESKTOP = 0x0014, 0x0002, 1
+    try:
+        user32.SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, ctypes.c_wchar_p(""), SPIF_SENDCHANGE)
+        colors = (ctypes.c_int * 1)(COLOR_DESKTOP)
+        values = (wintypes.DWORD * 1)(rgb[0] | (rgb[1] << 8) | (rgb[2] << 16))
+        user32.SetSysColors(1, colors, values)
+    except Exception as e:
+        print(f"  could not set desktop colour: {e}", flush=True)
+
+
+def print_crop(name: str, hwnd: int, margin: int = 12) -> None:
+    """Print a PNG crop of a window as base64 into the job log (artifacts are not always reachable)."""
+    try:
+        import base64
+        import io
+
+        from PIL import ImageGrab
+
+        l, t, r, b = api.window_rect(hwnd)
+        img = ImageGrab.grab(bbox=(l - margin, t - margin, r + margin, b + margin), all_screens=True)
+        buf = io.BytesIO()
+        img.save(buf, "PNG", optimize=True)
+        data = base64.b64encode(buf.getvalue()).decode()
+        print(f"BEGIN_PNG {name} {img.size[0]}x{img.size[1]}", flush=True)
+        for i in range(0, len(data), 4000):
+            print(data[i:i + 4000], flush=True)
+        print(f"END_PNG {name}", flush=True)
+    except Exception as e:
+        print(f"  crop {name} failed: {e}", flush=True)
+
+
 def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
 
@@ -206,6 +239,8 @@ def run(exe: Path, report: Path) -> None:
     reg_run_delete()
     print("environment:\n" + describe_desktop(), flush=True)
     expect("explorer.exe is running on the CI desktop", explorer_running(), warn_only=True)
+    set_desktop_color((255, 255, 255))  # worst case for white text
+    time.sleep(1)
     screenshot(report, "00-before")
 
     procs: list[subprocess.Popen] = []
@@ -218,6 +253,10 @@ def run(exe: Path, report: Path) -> None:
             return
         time.sleep(4)
         screenshot(report, "01-started")
+        print_crop("verse-on-white", verse)
+        set_desktop_color((22, 40, 70))
+        time.sleep(1.5)
+        print_crop("verse-on-dark", verse)
         check_widget(verse, "start")
 
         # A normal application window on top of the verse must stay on top of it.
