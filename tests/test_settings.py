@@ -26,6 +26,7 @@ def test_round_trip_preserves_everything_including_unknown_keys():
         "version": 1,
         "autostart": False,
         "desktop_mode": "owner",
+        "debug_log": True,
         "verse": {"x": -1200, "y": 35, "width": 600, "font_family": "Segoe UI", "font_size": 18.5,
                   "reference_font_size": 12, "color": "#FFEEDD", "shadow": False, "align": "left"},
         "zones": [{"name": "Work", "items": ["C:\\\\Docs"]}],
@@ -41,6 +42,7 @@ def test_invalid_values_fall_back_to_defaults_with_warnings():
         {
             "autostart": "yes",
             "desktop_mode": "floating",
+            "debug_log": "on",
             "verse": {"x": 10, "y": None, "width": 5, "font_size": True, "color": "white",
                       "align": "justify", "shadow": 1, "font_family": "", "reference_font_size": "big"},
         }
@@ -51,7 +53,8 @@ def test_invalid_values_fall_back_to_defaults_with_warnings():
     assert s.verse.width == d.width and s.verse.font_size == d.font_size
     assert s.verse.color == d.color and s.verse.align == d.align and s.verse.shadow is True
     assert s.verse.font_family == "Georgia" and s.verse.reference_font_size is None
-    assert len(warnings) == 10
+    assert s.debug_log is False
+    assert len(warnings) == 11
 
 
 def test_non_object_top_level():

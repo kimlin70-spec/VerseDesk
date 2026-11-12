@@ -82,6 +82,14 @@ def main(argv: list[str] | None = None) -> int:
 
         store = SettingsStore(paths.settings_path())
         result = store.load()
+        if store.settings.debug_log:
+            from PySide6.QtCore import QLoggingCategory
+
+            logging.getLogger().setLevel(logging.DEBUG)
+            QLoggingCategory.setFilterRules(
+                "qt.qpa.window.debug=true\nqt.qpa.screen.debug=true\nqt.qpa.trayicon.debug=true"
+            )
+            log.info("debug logging enabled (settings.json debug_log)")
         controller = VerseDeskApp(qapp, store, result)
         controller.start()
         if args.exit_after is not None:

@@ -293,9 +293,15 @@ class VerseDeskApp(QObject):
 
     @safe
     def _on_screens_settled(self) -> None:
+        if self._quitting:
+            return
         log.info("screen configuration changed; re-checking widget positions")
         self.verse_widget.relayout()
         self._position_verse()
+        if not self.verse_widget.isVisible():
+            # Qt destroys a window whose last screen disappeared (e.g. remote desktop); bring it back
+            log.info("verse window was hidden by a screen change; showing it again")
+            self.verse_widget.show()
         self.layer.request_sync()
 
     # ------------------------------------------------------------------ edit mode, autostart, folder

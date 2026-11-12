@@ -8,6 +8,7 @@ File layout (all keys optional; anything missing or invalid falls back to the de
       "version": 1,
       "autostart": true,
       "desktop_mode": "bottom",
+      "debug_log": false,             # true = very detailed log.txt (for troubleshooting)
       "verse": {
         "x": null, "y": null,          # top-left position; null = default (top-right of main screen)
         "width": 520,                  # text box width in pixels (at 100% scaling)
@@ -71,6 +72,7 @@ class VerseSettings:
 class Settings:
     autostart: bool = True
     desktop_mode: str = "bottom"
+    debug_log: bool = False
     verse: VerseSettings = field(default_factory=VerseSettings)
     extra: dict[str, Any] = field(default_factory=dict)  # unknown keys, preserved verbatim
 
@@ -110,7 +112,7 @@ def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
         warnings.append("settings.json top level is not an object; using defaults")
         return s, warnings
 
-    known = {"version", "autostart", "desktop_mode", "verse"}
+    known = {"version", "autostart", "desktop_mode", "debug_log", "verse"}
     s.extra = {k: copy.deepcopy(v) for k, v in data.items() if k not in known}
 
     if "autostart" in data:
@@ -118,6 +120,12 @@ def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
             s.autostart = data["autostart"]
         else:
             warnings.append("autostart must be true or false")
+
+    if "debug_log" in data:
+        if isinstance(data["debug_log"], bool):
+            s.debug_log = data["debug_log"]
+        else:
+            warnings.append("debug_log must be true or false")
 
     if "desktop_mode" in data:
         if data["desktop_mode"] in DESKTOP_MODES:
@@ -171,6 +179,7 @@ def settings_to_dict(s: Settings) -> dict[str, Any]:
         "version": SETTINGS_VERSION,
         "autostart": s.autostart,
         "desktop_mode": s.desktop_mode,
+        "debug_log": s.debug_log,
         "verse": {
             "x": vs.x,
             "y": vs.y,

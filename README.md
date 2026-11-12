@@ -66,6 +66,7 @@
   "version": 1,
   "autostart": true,
   "desktop_mode": "bottom",
+  "debug_log": false,
   "verse": {
     "x": null,
     "y": null,
@@ -92,6 +93,7 @@
 | `x`, `y` | 위치. `null` 이면 주 모니터 오른쪽 위. 배치 편집으로 옮기면 자동 저장 | `null` |
 | `autostart` | Windows 시작 시 자동 실행 | `true` / `false` |
 | `desktop_mode` | 바탕화면 고정 방식(아래 9번 참고). 바꾸면 **다시 시작**해야 적용 | `"bottom"` |
+| `debug_log` | `true` 면 문제 해결용 자세한 기록을 log.txt에 남김. 바꾸면 **다시 시작**해야 적용 | `false` |
 
 - 쉼표나 따옴표를 빠뜨리면 트레이에 "형식 오류" 알림이 뜨고, 고칠 때까지 이전 설정을 그대로 씁니다.
 - 처음 상태로 되돌리려면: 트레이 메뉴 → 종료 → `settings.json` 삭제 → 다시 실행.
@@ -152,7 +154,7 @@
 
 말씀이 아예 안 보이거나, Win+D 때 사라지거나, 다른 창 위로 올라온다면:
 
-1. `log.txt` 를 먼저 보내 주세요(7번).
+1. `settings.json` 의 `"debug_log": false` 를 `true` 로 바꾸고, 트레이 → 종료 → 다시 실행한 뒤 문제가 생기는 동작(예: Win+D)을 한 번 해 보세요. 그다음 `log.txt` 를 보내 주세요(7번). 확인이 끝나면 다시 `false` 로 돌려 두세요.
 2. 시험 삼아 `settings.json` 의 `"desktop_mode": "bottom"` 을 `"desktop_mode": "owner"` 로 바꾸고, 트레이 → 종료 → 다시 실행해 보세요(다른 고정 방식). 결과를 알려 주시면 원인을 좁히는 데 도움이 됩니다. 원래대로 하려면 `"bottom"` 으로 되돌리면 됩니다.
 
 ---
