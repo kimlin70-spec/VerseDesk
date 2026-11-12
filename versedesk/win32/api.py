@@ -25,8 +25,10 @@ GWL_STYLE = -16
 GWL_EXSTYLE = -20
 GWLP_HWNDPARENT = -8
 
+WS_POPUP = 0x80000000
 WS_CHILD = 0x40000000
 WS_VISIBLE = 0x10000000
+WS_DISABLED = 0x08000000
 WS_EX_TOPMOST = 0x00000008
 WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
@@ -143,6 +145,24 @@ SetWinEventHook = _proto(
 UnhookWinEvent = _proto(user32.UnhookWinEvent, wintypes.BOOL, HWINEVENTHOOK)
 AllowSetForegroundWindow = _proto(user32.AllowSetForegroundWindow, wintypes.BOOL, wintypes.DWORD)
 GetTopWindow = _proto(user32.GetTopWindow, HWND, HWND)
+CreateWindowExW = _proto(
+    user32.CreateWindowExW,
+    HWND,
+    wintypes.DWORD,
+    wintypes.LPCWSTR,
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    HWND,
+    wintypes.HMENU,
+    wintypes.HINSTANCE,
+    wintypes.LPVOID,
+)
+DestroyWindow = _proto(user32.DestroyWindow, wintypes.BOOL, HWND)
+GetModuleHandleW = _proto(kernel32.GetModuleHandleW, wintypes.HMODULE, wintypes.LPCWSTR)
 if dwmapi is not None:
     DwmSetWindowAttribute = _proto(
         dwmapi.DwmSetWindowAttribute,

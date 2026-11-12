@@ -17,13 +17,18 @@ Approach (default mode "bottom", modelled on Rainmeter's ZPOSITION_ONDESKTOP)
 * The "desktop host" is the top-level window that currently contains SHELLDLL_DefView
   (the desktop icons): Progman normally and on Windows 11 24H2+, or a WorkerW of
   explorer.exe after the desktop was "split" on older builds.
-* Keeper: rule = every widget sits *directly above the desktop host* in the z-order.
-  In the normal state the host is at the bottom, so the widgets are below every app.
-  When Show desktop raises the host above the apps, the widgets are put back directly
-  above it (if Explorer made it topmost, inserting there makes them topmost too; they
-  lose that again when the desktop drops).  The keeper runs every 500 ms, every 150 ms
-  while the desktop is raised, and in a short burst after every foreground-window change
-  (WinEvent hook) — Win+D makes the desktop the foreground window.
+* Normal state: every widget sits *directly above the desktop host* in the z-order. The
+  host is at the bottom, so the widgets are below every app window.
+* Show desktop (Win+D) first minimizes the app windows, then raises the host above all
+  non-topmost windows — and Explorer may raise it again a moment later.  So while the
+  desktop is raised the widgets are made *topmost*, just below the lowest foreign
+  topmost window (taskbar etc.); when the desktop drops they become non-topmost and go
+  back directly above the host.  "Raised" is detected like Rainmeter does: a hidden
+  sentinel window kept at HWND_BOTTOM ends up *below* the host only when the host was
+  raised; additionally no visible normal app window may be above the host.
+* The keeper runs every 500 ms, every 150 ms while the desktop is raised, and in a short
+  burst after every foreground-window change (WinEvent hook): Win+D makes the desktop
+  the foreground window, and Explorer finishes re-ordering a few ms later.
 * explorer.exe restart: nothing is owned by Explorer, so nothing is destroyed; the
   keeper simply finds the new host on its next pass.
 
@@ -52,7 +57,8 @@ log = logging.getLogger("versedesk.desktop")
 TICK_MS = 500
 RAISED_TICK_MS = 150
 SOON_MS = 30
-BURST_MS = (30, 120, 300, 600, 1000)  # re-checks after a foreground change
+BURST_MS = (10, 40, 120, 300, 700, 1200)  # re-checks after a foreground change
+SENTINEL_TITLE = "VerseDesk z-order sentinel"
 DESKTOP_CLASSES = ("Progman", "WorkerW")
 MAX_WALK = 4096
 FIGHT_WINDOW_S = 10.0
@@ -153,16 +159,37 @@ def check_placement(hwnd: int, host: int, own: set[int] | frozenset[int] = froze
     return False, 0
 
 
-def desktop_raised(host: int, own: set[int] | frozenset[int] = frozenset()) -> bool:
-    """Heuristic used only to speed up the keeper: True when Show desktop has lifted the
-    host above normal windows (some visible app window lies *below* the host)."""
-    if not host:
-        return False
-    w = api.h(api.GetWindow(host, api.GW_HWNDNEXT))
+def blocking_window_above(host: int, own: set[int] | frozenset[int] = frozenset()) -> int:
+    """First visible normal (non-topmost) app window above the host, or 0."""
+    w = api.h(api.GetWindow(host, api.GW_HWNDPREV))
+    for _ in range(MAX_WALK):
+        if not w:
+            return 0
+        if w not in own and not api.is_topmost(w) and is_blocking(w, host):
+            return w
+        w = api.h(api.GetWindow(w, api.GW_HWNDPREV))
+    return 0
+
+
+def lowest_foreign_topmost_above(host: int, own: set[int] | frozenset[int] = frozenset()) -> int:
+    """The topmost window closest above the host (taskbar, overlays...), ignoring ours."""
+    w = api.h(api.GetWindow(host, api.GW_HWNDPREV))
+    for _ in range(MAX_WALK):
+        if not w:
+            return 0
+        if w not in own and api.is_topmost(w):
+            return w
+        w = api.h(api.GetWindow(w, api.GW_HWNDPREV))
+    return 0
+
+
+def is_below(target: int, start: int) -> bool:
+    """True if ``target`` comes after ``start`` in the z-order (is beneath it)."""
+    w = api.h(api.GetWindow(start, api.GW_HWNDNEXT))
     for _ in range(MAX_WALK):
         if not w:
             return False
-        if w not in own and is_blocking(w, host):
+        if w == target:
             return True
         w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
     return False
@@ -179,7 +206,8 @@ def describe_desktop(own: set[int] | frozenset[int] = frozenset()) -> str:
         for w in top_level_workerws(32):
             lines.append(f"  WorkerW: {api.describe(w)} defview=0x{_defview_in(w):X}")
         host = find_desktop_host()
-        lines.append(f"  desktop host: {api.describe(host)} raised={desktop_raised(host, own)}")
+        above = blocking_window_above(host, own) if host else 0
+        lines.append(f"  desktop host: {api.describe(host)}; first app window above it: {api.describe(above)}")
         # the visible z-order, top to bottom (usually 10-40 windows)
         lines.append("  visible top-level windows, top to bottom:")
         w = api.h(api.GetTopWindow(None))
@@ -243,6 +271,7 @@ class Win32DesktopLayer(QObject):
         self._pinned: dict[int, _Pinned] = {}
         self._host = 0
         self._raised = False
+        self._sentinel = 0
         self._info_fix_logs = 0
         self._vetoes = 0
         self._timer = QTimer(self)
@@ -302,6 +331,7 @@ class Win32DesktopLayer(QObject):
 
     def start(self) -> None:
         log.info("desktop layer mode=%s\n%s", self.mode, describe_desktop(self._own()))
+        self._ensure_sentinel()
         self._timer.start()
         if not self._hook:
             flags = api.WINEVENT_OUTOFCONTEXT | api.WINEVENT_SKIPOWNPROCESS
@@ -318,6 +348,9 @@ class Win32DesktopLayer(QObject):
         if self._hook:
             api.UnhookWinEvent(self._hook)
             self._hook = None
+        if self._sentinel:
+            api.DestroyWindow(self._sentinel)
+            self._sentinel = 0
 
     def request_sync(self) -> None:
         if not self._soon.isActive():
@@ -339,7 +372,7 @@ class Win32DesktopLayer(QObject):
                 f"owner={api.describe(owner)} directly_above_desktop={ok}"
                 + (f" blocker={api.describe(blocker)}" if blocker else "")
             )
-        lines.append(f"  z-order vetoes so far: {self._vetoes}")
+        lines.append(f"  raised={self._raised} sentinel={api.describe(self._sentinel)} vetoes={self._vetoes}")
         return "\n".join(lines)
 
     # ---- the z-order veto (called from the widget's nativeEvent)
@@ -347,7 +380,10 @@ class Win32DesktopLayer(QObject):
     def native_filter(self, message) -> None:
         """Turn z-order changes requested by anyone else into no-ops. Never raises."""
         try:
-            msg = api.wintypes.MSG.from_address(int(message))
+            address = int(message)
+            if not address:
+                return
+            msg = api.wintypes.MSG.from_address(address)
             if msg.message != api.WM_WINDOWPOSCHANGING or not msg.lParam:
                 return
             wp = api.WINDOWPOS.from_address(msg.lParam)
@@ -395,16 +431,48 @@ class Win32DesktopLayer(QObject):
             self._host = host
         return host
 
+    def _ensure_sentinel(self) -> None:
+        """A hidden window kept at HWND_BOTTOM (Rainmeter's trick): it lies below the
+        desktop host only while Show desktop has raised the host."""
+        if self._sentinel and api.IsWindow(self._sentinel):
+            return
+        self._sentinel = api.h(
+            api.CreateWindowExW(
+                api.WS_EX_TOOLWINDOW | api.WS_EX_NOACTIVATE,
+                "Static",
+                SENTINEL_TITLE,
+                api.WS_POPUP | api.WS_DISABLED,
+                0, 0, 0, 0,
+                None, None, api.GetModuleHandleW(None), None,
+            )
+        )
+        if not self._sentinel:
+            log.warning("could not create the z-order sentinel (error %s)", ctypes.get_last_error())
+            return
+        api.SetWindowPos(self._sentinel, api.HWND_BOTTOM, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+
+    def _is_raised(self, host: int) -> bool:
+        if not host or not self._sentinel or not api.IsWindowVisible(host):
+            return False
+        # FindWindowEx with a child-after window searches the windows *below* it, in the kernel
+        if not api.h(api.FindWindowExW(None, host, "Static", SENTINEL_TITLE)):
+            return False
+        return blocking_window_above(host, self._own()) == 0
+
     def _tick(self) -> None:
         try:
             host = self._current_host()
-            for entry in list(self._pinned.values()):
-                self._sync_entry(entry, host)
-            raised = desktop_raised(host, self._own())
+            self._ensure_sentinel()
+            raised = self._is_raised(host)
             if raised != self._raised:
                 self._raised = raised
-                log.info("desktop %s", "raised (Show desktop)" if raised else "back to normal")
+                log.info("desktop %s", "raised (Show desktop): lifting widgets" if raised else "back to normal")
                 self._timer.setInterval(RAISED_TICK_MS if raised else TICK_MS)
+            for entry in list(self._pinned.values()):
+                self._sync_entry(entry, host)
+            if not raised and self._sentinel and host and api.h(api.FindWindowExW(None, host, "Static", SENTINEL_TITLE)):
+                # the desktop dropped without passing the sentinel: put it back to the bottom
+                api.SetWindowPos(self._sentinel, api.HWND_BOTTOM, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
         except Exception:
             log.exception("desktop sync failed")
 
@@ -432,6 +500,14 @@ class Win32DesktopLayer(QObject):
             if owner != host:
                 api.SetWindowLongPtrW(hwnd, api.GWLP_HWNDPARENT, host)
                 force = True
+        if self._raised and self.mode == "bottom":  # (owned widgets rise with their owner)
+            if not api.is_topmost(hwnd) or not is_below(host, hwnd):
+                self._lift(entry, host)
+            return
+        if api.is_topmost(hwnd):
+            # the desktop dropped again: leave the topmost band first
+            api.SetWindowPos(hwnd, api.HWND_NOTOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+            force = True
         if force or not check_placement(hwnd, host, self._own())[0]:
             if self._may_fix(entry):
                 self._place_above(entry, host)
@@ -490,26 +566,28 @@ class Win32DesktopLayer(QObject):
         return True
 
     def _place_above(self, entry: _Pinned, host: int) -> None:
-        """Put the widget directly above the desktop host in the z-order."""
+        """Normal state: put the widget directly above the desktop host in the z-order."""
         hwnd = entry.hwnd
         above = api.h(api.GetWindow(host, api.GW_HWNDPREV))
         if above == hwnd:
             return
-        if api.is_topmost(hwnd) and not api.is_topmost(host):
-            # lifted during Show desktop; the desktop has dropped again
-            api.SetWindowPos(hwnd, api.HWND_NOTOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
-            above = api.h(api.GetWindow(host, api.GW_HWNDPREV))
-            if above == hwnd:
-                return
         insert_after = above if above else api.HWND_TOP
         ok = api.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+        self._log_fix(entry, f"just above the desktop (after {api.describe(above) if above else 'HWND_TOP'})", ok)
+
+    def _lift(self, entry: _Pinned, host: int) -> None:
+        """Show desktop: topmost, just below the lowest foreign topmost window."""
+        hwnd = entry.hwnd
+        ok = api.SetWindowPos(hwnd, api.HWND_TOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+        anchor = lowest_foreign_topmost_above(host, self._own())
+        if anchor:
+            ok = api.SetWindowPos(hwnd, anchor, 0, 0, 0, 0, OUR_ZORDER_FLAGS) and ok
+            if not api.is_topmost(hwnd):  # be sure we stayed in the topmost band
+                ok = api.SetWindowPos(hwnd, api.HWND_TOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+        self._log_fix(entry, f"lifted above the raised desktop (below {api.describe(anchor)})", ok)
+
+    def _log_fix(self, entry: _Pinned, what: str, ok) -> None:
         level = logging.INFO if self._info_fix_logs < MAX_INFO_FIX_LOGS else logging.DEBUG
         self._info_fix_logs += 1
-        log.log(
-            level,
-            "placed widget %r just above the desktop (after %s) ok=%s topmost=%s",
-            entry.widget.objectName(),
-            api.describe(above) if above else "HWND_TOP",
-            bool(ok),
-            api.is_topmost(hwnd),
-        )
+        log.log(level, "widget %r %s ok=%s topmost=%s", entry.widget.objectName(), what, bool(ok),
+                api.is_topmost(entry.hwnd))
