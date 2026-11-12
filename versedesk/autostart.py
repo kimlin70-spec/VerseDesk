@@ -12,6 +12,7 @@ The registry access is behind a tiny interface so the logic can be tested with a
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Protocol
@@ -73,6 +74,17 @@ def launch_command(executable: str | Path) -> str:
     return f'"{Path(executable)}"'
 
 
+def same_command(a: str | None, b: str | None) -> bool:
+    """Run values naming the same exe (ignoring quotes and letter case, as Windows does)."""
+    if a is None or b is None:
+        return False
+
+    def norm(s: str) -> str:
+        return os.path.normcase(os.path.normpath(s.strip().strip('"')))
+
+    return norm(a) == norm(b)
+
+
 def current_exe() -> Path | None:
     """Path of the running VerseDesk.exe, or None when not running as a frozen exe."""
     if getattr(sys, "frozen", False):
@@ -112,14 +124,16 @@ class Autostart:
             return False
         return approved_flag_enabled(self.backend.get(APPROVED_KEY, VALUE_NAME))
 
-    def enable(self) -> bool:
+    def enable(self, user_request: bool = True) -> bool:
+        """Register the Run value. Only an explicit "on" from the user (the tray menu) also
+        clears a "disabled" mark left by Task Manager / Settings; startup never does."""
         if not self.supported:
             return False
         assert self.backend is not None and self.exe is not None
         try:
             self.backend.set_string(RUN_KEY, VALUE_NAME, launch_command(self.exe))
-            # An explicit "on" from our menu also overrides an earlier "off" in Task Manager.
-            self.backend.delete(APPROVED_KEY, VALUE_NAME)
+            if user_request:
+                self.backend.delete(APPROVED_KEY, VALUE_NAME)
             log.info("autostart enabled: %s", launch_command(self.exe))
             return True
         except OSError:
@@ -153,8 +167,8 @@ class Autostart:
             if wanted:
                 expected = launch_command(self.exe)
                 if registered is None:
-                    self.enable()
-                elif registered != expected:
+                    self.enable(user_request=False)
+                elif not same_command(registered, expected):
                     self.backend.set_string(RUN_KEY, VALUE_NAME, expected)
                     log.info("autostart path updated: %s -> %s", registered, expected)
             elif registered is not None:

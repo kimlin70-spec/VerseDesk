@@ -17,6 +17,7 @@ log = logging.getLogger("versedesk.single_instance")
 
 MUTEX_NAME = "Local\\VerseDesk.SingleInstance.6f0c2a"
 ERROR_ALREADY_EXISTS = 183
+ERROR_ACCESS_DENIED = 5
 
 
 class SingleInstance:
@@ -45,6 +46,8 @@ class SingleInstance:
         handle = kernel32.CreateMutexW(None, False, MUTEX_NAME)
         err = ctypes.get_last_error()
         if not handle:
+            if err == ERROR_ACCESS_DENIED:  # owned by an instance running with higher rights
+                return False
             log.warning("CreateMutexW failed (error %s); continuing", err)
             return True
         self._handle = handle  # keep it open until exit

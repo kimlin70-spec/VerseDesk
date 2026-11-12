@@ -50,18 +50,22 @@ def main(argv: list[str] | None = None) -> int:
         shutdown_logging,
     )
 
+    from versedesk.single_instance import SingleInstance, show_already_running_message
+
+    # Take the single-instance lock before touching log.txt: two processes must never
+    # write (and rotate) the same log file.
+    instance = SingleInstance(paths.app_data_dir())
+    if not instance.acquire():
+        if not args.no_duplicate_dialog:
+            show_already_running_message()
+        return EXIT_ALREADY_RUNNING
+
+    if getattr(sys, "frozen", False):
+        logging.raiseExceptions = False  # a logging failure must never surface as an error
     setup_logging(paths.log_path())
     clean_exit = False
     try:
         _log_startup()
-        from versedesk.single_instance import SingleInstance, show_already_running_message
-
-        instance = SingleInstance(paths.app_data_dir())
-        if not instance.acquire():
-            log.info("another VerseDesk is already running; exiting")
-            if not args.no_duplicate_dialog:
-                show_already_running_message()
-            return EXIT_ALREADY_RUNNING
         enable_crash_report(paths.crash_path())
 
         from PySide6 import __version__ as pyside_version

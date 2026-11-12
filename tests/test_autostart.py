@@ -105,3 +105,27 @@ def test_real_registry_roundtrip():
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)
             except OSError:
                 pass
+
+
+def test_startup_never_clears_a_task_manager_disable_even_when_re_registering():
+    reg = FakeRegistry()
+    reg.values[(APPROVED_KEY, VALUE_NAME)] = b"\x03" + b"\x00" * 11  # disabled in Task Manager
+    a = Autostart(reg, EXE)
+    assert a.sync_at_startup(True) is False  # Run value written, but the user's "off" stays
+    assert reg.get(RUN_KEY, VALUE_NAME) == launch_command(EXE)
+    assert (APPROVED_KEY, VALUE_NAME) in reg.values
+
+
+def test_paths_differing_only_in_case_or_quotes_are_not_rewritten():
+    from versedesk.autostart import same_command
+
+    reg = FakeRegistry()
+    reg.set_string(RUN_KEY, VALUE_NAME, launch_command(EXE).upper() if sys.platform == "win32" else launch_command(EXE))
+    writes = []
+    original = reg.set_string
+    reg.set_string = lambda *a: writes.append(a) or original(*a)
+    Autostart(reg, EXE).sync_at_startup(True)
+    assert writes == []
+    assert same_command('"C:/A/B.exe"', "C:/A/B.exe")
+    assert not same_command('"C:/A/B.exe"', '"C:/A/C.exe"')
+    assert not same_command(None, '"C:/A/B.exe"')

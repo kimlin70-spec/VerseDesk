@@ -40,7 +40,7 @@ VSVersionInfo(
     StringFileInfo([
       StringTable('040904B0', [
         StringStruct('CompanyName', 'VerseDesk'),
-        StringStruct('FileDescription', 'VerseDesk - verse of the day on the desktop'),
+        StringStruct('FileDescription', 'VerseDesk'),
         StringStruct('FileVersion', '{version}.{build}'),
         StringStruct('InternalName', 'VerseDesk'),
         StringStruct('LegalCopyright', 'Scripture: Berean Standard Bible (BSB), public domain'),
