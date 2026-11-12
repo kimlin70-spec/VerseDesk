@@ -449,30 +449,50 @@ def ole_drag_file(path: Path, target: tuple[int, int]) -> object:
     return result
 
 
-def clear_area(target: int) -> list[str]:
-    """Runner desktops sometimes pop up stray windows (a 'System Properties' dialog was seen
-    over the zone): close or minimise foreign windows above ``target`` that overlap it."""
-    l, t, r, b = api.window_rect(target)
-    own = api.process_id(target)
-    order = top_level_windows()
-    if target not in order:
-        return []
-    cleared = []
-    for w in order[: order.index(target)]:
-        if not api.IsWindowVisible(w) or api.IsIconic(w) or api.is_cloaked(w) or api.process_id(w) == own:
-            continue
-        if api.class_name(w) in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW"):
-            continue
-        wl, wt, wr, wb = api.window_rect(w)
-        if wl < r and wr > l and wt < b and wb > t:
-            cleared.append(api.describe(w))
-            if api.class_name(w) == "#32770":
+def image_name(pid: int) -> str:
+    r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True, text=True)
+    first = (r.stdout or "").strip().splitlines()[:1]
+    return first[0].split('","')[0].strip('"').lower() if first and first[0].startswith('"') else ""
+
+
+DRAG_SOURCE_AREA = (40, 120, 240, 230)  # where ole_drag_file puts its source window
+
+
+def clear_area(target: int, extra=(DRAG_SOURCE_AREA,)) -> list[str]:
+    """Runner desktops pop up stray windows during the run (after the explorer restart a
+    'System Properties' and then a 'Performance Options' dialog appeared over the zone).
+    Close or minimise every foreign window that overlaps ``target`` or ``extra`` areas,
+    repeating until none is left."""
+    own = {api.process_id(target), os.getpid()}
+    keep_titles = ("VerseDesk CI keeper", "VerseDesk CI drag source")
+    shell = ("Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW")
+    cleared: list[str] = []
+    for _attempt in range(5):
+        areas = [api.window_rect(target), *extra]
+        found = []
+        for w in top_level_windows():
+            if not api.IsWindowVisible(w) or api.IsIconic(w) or api.is_cloaked(w):
+                continue
+            if api.process_id(w) in own or api.class_name(w) in shell or api.window_text(w) in keep_titles:
+                continue
+            wl, wt, wr, wb = api.window_rect(w)
+            if any(wl < r and wr > l and wt < b and wb > t for l, t, r, b in areas):
+                found.append(w)
+        if not found:
+            break
+        for w in found:
+            pid = api.process_id(w)
+            name = image_name(pid)
+            cleared.append(f"{api.describe(w)} [{name}]")
+            if name.startswith("systemproperties"):
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+            elif api.class_name(w) == "#32770":
                 user32.PostMessageW(w, 0x0010, 0, 0)  # WM_CLOSE a stray dialog
             else:
                 user32.ShowWindow(w, SW_MINIMIZE)
+        time.sleep(1.5)
     if cleared:
         print("  cleared stray windows over the test area: " + "; ".join(cleared), flush=True)
-        time.sleep(1.0)
     return cleared
 
 
@@ -541,6 +561,7 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
         print_crop("zone-start", zone)
 
         # A real OLE drag offering Copy|Move|Link (Move proposed) must be taken as a Link.
+        clear_area(zone)
         before = list(saved_zone(appdata).get("items", []))
         result = ole_drag_file(dropped, ((l + r) // 2, (t + b) // 2 + 30))
         expect("zones: a dropped file is taken as a LINK (never Move or Copy)", result == Qt.DropAction.LinkAction,
@@ -561,6 +582,7 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
 
         # 구역에서 빼기 via the right-click menu: the item leaves the list, the file stays.
         index = len(saved_zone(appdata).get("items", [])) - 1
+        clear_area(zone)
         right_click(*item_center(rect, index))
         popups = wait_for(lambda: popup_windows_of(api.process_id(zone)), timeout=5)
         if expect("zones: right-click on an item opens its menu", bool(popups)):
@@ -585,6 +607,7 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
         expect("zones: pressing it again shows the items again (saved)", bool(expanded) and eb - et == b - t,
                f"height {eb - et} (was {b - t})")
         # Double-click the folder item: Explorer opens it.
+        clear_area(zone)
         before_windows = set(top_level_windows())
         double_click(*item_center(rect, 0))
         opened = wait_for(lambda: [w2 for w2 in top_level_windows() if w2 not in before_windows
