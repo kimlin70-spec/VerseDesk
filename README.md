@@ -181,13 +181,15 @@ versedesk/
   daywatch.py        자정·절전 복귀 날짜 변경 감지
   autostart.py       HKCU Run + StartupApproved
   single_instance.py 중복 실행 방지(명명된 뮤텍스)
+  housekeeping.py    지난 실행이 남긴 임시 폴더(_MEI…) 정리
   desktop_layer.py   바탕화면 고정 인터페이스(윈도우 외에서는 빈 구현)
   win32/api.py       ctypes 선언
   win32/desktop.py   바탕화면 고정 구현(Rainmeter 방식: z-order 거부 + 바탕화면 바로 위 유지)
-  ui/verse_widget.py 말씀 위젯, ui/tray.py 트레이 메뉴, ui/icon.py 아이콘
+  ui/desktop_widget.py 바탕화면 위젯 공통 기반(z-order 거부 훅), ui/verse_widget.py 말씀 위젯,
+  ui/tray.py 트레이 메뉴, ui/icon.py 아이콘
   data/verses.json   내장 366일 구절(tools/build_verses.py 로 생성)
 tools/   bsb.py(원문 조회) build_verses.py verse_plan.tsv make_icon.py write_build_info.py ci_desktop_check.py
-tests/   pytest (리눅스에서는 QT_QPA_PLATFORM=offscreen)
+tests/   pytest (리눅스에서는 QT_QPA_PLATFORM=offscreen). tests/fake_win32.py는 윈도우 창 관리자 흉내(바탕화면 고정 로직 테스트용)
 ```
 
 ```bash

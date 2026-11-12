@@ -63,7 +63,13 @@
 - [대기] ② 폴더 구역 — 사용자가 ①을 윈도우에서 확인한 뒤 시작
   - 준비된 것: `ui/desktop_widget.py`(바탕화면 위젯 공통 기반), `layer.attach/detach`, 설정의 알 수 없는 키 보존(`zones` 추가 예정)
   - 주의(조사 결과): 구역 상자는 모든 픽셀 알파 ≥ 2/255(드롭이 바탕화면으로 새지 않게), WS_EX_TRANSPARENT 금지,
-    대화상자는 부모 없이 생성, 파일 열기 전 AllowSetForegroundWindow, 경로 존재 확인·아이콘 추출은 작업 스레드에서
+    대화상자는 부모 없이 생성(Qt.Tool 위젯을 부모로 주면 owner가 되어 같이 끌려 올라옴), 파일 열기 전 AllowSetForegroundWindow,
+    경로 존재 확인·아이콘 추출은 작업 스레드에서(네트워크 경로가 GUI를 멈추지 않게)
+  - 드래그 앤 드롭: dragEnter/dragMove/drop 모두 `event.setDropAction(Qt.LinkAction)`, possibleActions에 Link가 없으면 ignore.
+    acceptProposedAction() 금지(Move가 되면 탐색기가 원본을 옮김). QApplication 전에 COM을 MTA로 초기화하지 말 것(Qt가 STA OleInitialize).
+  - 항목 열기(os.startfile 등) 때 PyInstaller 환경을 자식 프로세스에 물려주지 않기: SetDllDirectoryW(None),
+    PATH에서 sys._MEIPASS 제거, QT_PLUGIN_PATH/QML2_IMPORT_PATH 제거 후 실행하고 복원.
+  - 확인/취소 같은 대화상자 단추는 한국어로 직접 지정(번역 파일 .qm은 exe에서 뺐음).
 
 ## 개발 메모 (다음 세션용)
 
@@ -94,6 +100,12 @@
 - 원문: https://bereanbible.com/bsb.txt (+ 시편 표제 확인용 bsb_usfm.zip). SHA-256은 `tools/bsb.py`에 고정.
 - `python3 -I tools/bsb.py download` → `tools/.cache/`(git 제외). `python3 -I tools/bsb.py lookup "John 3:16"`으로 원문 조회.
 - `tools/verse_plan.tsv`(날짜→구절) 수정 후 `python3 -I tools/build_verses.py`로 `versedesk/data/verses.json` 재생성. 본문을 손으로 쓰지 말 것.
+
+### 검증된 사실 (CI의 실제 윈도우 바탕화면에서 확인, 2026-11)
+- windows-latest(Server 2025, 빌드 26100 = Win11 24H2 구조): Progman이 DefView를 품음. Win+D → 앱 최소화 후 Progman이 올라옴
+  → 위젯이 작업표시줄 바로 아래 topmost로 들려 보임 → 다시 Win+D/앱 복원 시 정상 위치로 내려감. 45개 점검 통과.
+- windows-2022(Server 2022, 빌드 20348 = Win10 구조): Win+D 때 DefView가 새 WorkerW로 옮겨지고 그 WorkerW가 올라옴
+  → host 재탐색으로 따라감. 45개 점검 통과. explorer 재시작 후에도 같은 창(HWND)으로 계속 바탕화면 위에 있음.
 
 ### 빌드·테스트
 - 로컬(리눅스): `QT_QPA_PLATFORM=offscreen python -m pytest -q` (Qt용 시스템 라이브러리 libegl1 등 필요)
