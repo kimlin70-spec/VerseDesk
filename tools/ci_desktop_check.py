@@ -6,8 +6,11 @@ It starts the exe with a clean profile and verifies, through the Win32 API, the 
 the user cannot easily test one by one:
   * the verse window exists, is a tool window (no taskbar/Alt+Tab), never activates,
     is not owned by Explorer and sits directly above the desktop window;
-  * click-through: a hit test on a part of the verse no other window covers must land on
-    the window *below* it (where every part is covered the test cannot decide: SKIP);
+  * click-through: hit tests over every uncovered part of the verse must land on the window
+    *below* it.  While Show desktop leaves the verse uncovered on a plain background, the
+    test samples the drawn text itself (a layered window lets clicks through its fully
+    transparent pixels anyway) and a control run without WS_EX_TRANSPARENT must hit the
+    verse there, so the test can really fail;
   * a normal application window placed on top of it stays on top;
   * after Win+D (Show desktop) the verse is still visible above the desktop, and the
     normal window is not; Win+D again restores the normal window above the verse;
@@ -44,6 +47,7 @@ from versedesk.win32 import api  # noqa: E402
 from versedesk.win32.desktop import check_placement, describe_desktop, find_desktop_host  # noqa: E402
 
 VERSE_TITLE = "VerseDesk Verse"
+DARK_DESKTOP = (22, 40, 70)  # plain desktop colour used while judging legibility and click-through
 TEST_TITLE = "VerseDesk CI test window"
 RESULTS: list[dict] = []
 
@@ -269,41 +273,92 @@ def check_widget(verse: int, label: str) -> None:
     check_click_through(verse, label)
 
 
-def uncovered_point(verse: int) -> tuple[int, int] | None:
-    """A point of the verse that no visible window above it covers, or None if fully covered."""
+def uncovered_points(verse: int, step: int = 3) -> list[tuple[int, int]]:
+    """Points of the verse (on a grid) that no visible window above it covers."""
     order = top_level_windows()
     if verse not in order:
-        return None
-    covers = []
-    for w in order[: order.index(verse)]:
-        if api.IsWindowVisible(w) and not api.IsIconic(w) and not api.is_cloaked(w):
-            covers.append(api.window_rect(w))
+        return []
+    covers = [api.window_rect(w) for w in order[: order.index(verse)]
+              if api.IsWindowVisible(w) and not api.IsIconic(w) and not api.is_cloaked(w)]
     l, t, r, b = api.window_rect(verse)
-    for fy in (0.5, 0.3, 0.7, 0.15, 0.85):
-        for fx in (0.5, 0.3, 0.7, 0.15, 0.85, 0.05, 0.95):
-            x, y = int(l + (r - l) * fx), int(t + (b - t) * fy)
-            if not any(cl <= x < cr and ct <= y < cb for cl, ct, cr, cb in covers):
-                return x, y
-    return None
+    return [(x, y) for y in range(t + 1, b - 1, step) for x in range(l + 1, r - 1, step)
+            if not any(cl <= x < cr and ct <= y < cb for cl, ct, cr, cb in covers)]
 
 
-def check_click_through(verse: int, label: str) -> None:
-    """A click on the verse must reach the window *below* it.  Only meaningful at a point
-    no other window covers; otherwise the result says nothing and is reported as SKIP."""
-    name = f"{label}: a click on the verse reaches the window behind it"
-    p = uncovered_point(verse)
-    if p is None:
+def root_at(x: int, y: int) -> int:
+    under = api.h(user32.WindowFromPoint(wintypes.POINT(x, y)))
+    return api.h(user32.GetAncestor(under, api.GA_ROOT)) if under else 0
+
+
+def painted_points(verse: int, points: list[tuple[int, int]], background: tuple[int, int, int]) -> list[tuple[int, int]]:
+    """The sampled points where the verse actually draws (text, outline, shadow): a layered
+    window lets clicks through its fully transparent pixels even without WS_EX_TRANSPARENT,
+    so only painted pixels can show whether click-through works."""
+    try:
+        from PIL import ImageGrab
+
+        l, t, r, b = api.window_rect(verse)
+        img = ImageGrab.grab(bbox=(l, t, r, b), all_screens=True).convert("RGB")
+    except Exception as e:
+        print(f"  could not capture the verse: {e}", flush=True)
+        return []
+    out = []
+    for x, y in points:
+        px = img.getpixel((x - l, y - t))
+        if max(abs(px[i] - background[i]) for i in range(3)) > 60:
+            out.append((x, y))
+    return out
+
+
+def check_click_through(verse: int, label: str, background: tuple[int, int, int] | None = None) -> None:
+    """A click on the verse must reach the window *below* it.
+
+    Every uncovered grid point is hit-tested: any hit on the verse is a FAIL.  When the
+    desktop colour behind the verse is known (``background``), the test is made decisive:
+    it needs painted pixels among the samples, and a control run with WS_EX_TRANSPARENT
+    briefly removed must hit the verse at those pixels (so the test can fail at all).
+    """
+    name = f"{label}: clicks on the verse reach the window behind it"
+    points = uncovered_points(verse)
+    if not points:
         record(name, "SKIP", "every part of the verse is covered by another window here")
         return
-    under = api.h(user32.WindowFromPoint(wintypes.POINT(*p)))
-    root = api.h(user32.GetAncestor(under, api.GA_ROOT)) if under else 0
-    detail = f"WindowFromPoint{p} -> {api.describe(under)} (root {api.describe(root)})"
-    if root == verse:
-        record(name, "FAIL", detail)
-    elif root and zindex(root) > zindex(verse):
+    order = top_level_windows()
+    my_z = order.index(verse) if verse in order else -1
+    roots = {pt: root_at(*pt) for pt in points}
+    on_verse = [pt for pt, root in roots.items() if root == verse]
+    below = [pt for pt, root in roots.items() if root and root in order and order.index(root) > my_z]
+    detail = f"{len(points)} points sampled, {len(on_verse)} hit the verse, {len(below)} reached a window below"
+    if on_verse:
+        record(name, "FAIL", f"{detail}; e.g. {on_verse[0]}")
+        return
+    if background is None:
+        record(name, "PASS" if below else "WARN", detail if below else "inconclusive: " + detail)
+        return
+    painted = painted_points(verse, points, background)
+    painted_below = [pt for pt in painted if pt in below]
+    detail += f"; {len(painted)} of them on drawn text/shadow, {len(painted_below)} of those reached a window below"
+    if not painted_below:
+        record(name, "WARN", "inconclusive (no drawn pixel sampled): " + detail)
+        return
+    # Control: without WS_EX_TRANSPARENT the drawn pixels must be hit, or the test proves nothing.
+    ex = api.ex_style(verse)
+    hits, sample = 0, painted_below[:: max(1, len(painted_below) // 200)]
+    try:
+        api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex & ~api.WS_EX_TRANSPARENT)
+        time.sleep(0.3)
+        hits = sum(1 for pt in sample if root_at(*pt) == verse)
+    finally:
+        api.SetWindowLongPtrW(verse, api.GWL_EXSTYLE, ex)
+        time.sleep(0.3)
+    detail += f"; control without WS_EX_TRANSPARENT: {hits} of {len(sample)} drawn points hit the verse"
+    restored = api.ex_style(verse) == ex
+    if not restored:
+        record(name, "FAIL", detail + "; the window style could not be restored")
+    elif hits:
         record(name, "PASS", detail)
-    else:  # something we did not see as covering answered: cannot judge
-        record(name, "WARN", "inconclusive: " + detail)
+    else:
+        record(name, "WARN", "inconclusive (the control could not hit the verse): " + detail)
 
 
 def run(exe: Path, report: Path) -> None:
@@ -366,7 +421,7 @@ def run(exe: Path, report: Path) -> None:
             screenshot(report, "03-after-win-d")
             # the verse is now in front of the (plain-coloured) desktop: show how it renders
             print_crop("verse-on-white", verse)
-            set_desktop_color((22, 40, 70))
+            set_desktop_color(DARK_DESKTOP)
             time.sleep(1.5)
             print_crop("verse-on-dark", verse)
             desktop_came_forward = (zindex(host) >= 0 and zindex(host) < zindex(tw)) or bool(api.IsIconic(tw))
@@ -375,8 +430,9 @@ def run(exe: Path, report: Path) -> None:
                 expect("after Win+D the verse is above the desktop", zindex(verse) < zindex(host),
                        f"z(verse)={zindex(verse)} z(host)={zindex(host)}")
                 expect("after Win+D the verse is not covered", visible_on_top_at(verse, [host, tw]))
-                # nothing covers the verse now, so this hit test really decides click-through
-                check_click_through(verse, "after Win+D")
+                # nothing covers the verse now and the desktop behind it is plain dark blue, so
+                # this hit test (with its control) really decides click-through
+                check_click_through(verse, "after Win+D", background=DARK_DESKTOP)
                 press_win_d()
                 time.sleep(3)
                 screenshot(report, "04-after-second-win-d")
