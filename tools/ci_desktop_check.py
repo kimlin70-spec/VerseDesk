@@ -22,7 +22,10 @@ the user cannot easily test one by one:
   * edit mode (배치 편집): the verse catches the mouse, a real drag moves it, the position
     is saved to settings.json and a restart shows it there again;
   * real mouse clicks on the verse's drawn text, in the normal state (runner consoles
-    minimised) and during Show desktop, must not reach the app (it logs any that do).
+    minimised) and during Show desktop, must not reach the app (it logs any that do);
+  * folder zones: styles, every pixel takes the mouse, a real OLE drag offering
+    Copy|Move|Link is taken as a LINK and the original stays, 구역에서 빼기 via the
+    right-click menu, double-click opens a folder in Explorer, collapse/expand is saved.
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -82,6 +85,8 @@ user32.keybd_event.restype = None
 
 user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.ShowWindow.restype = wintypes.BOOL
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostMessageW.restype = wintypes.BOOL
 user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 user32.SetCursorPos.restype = wintypes.BOOL
 user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, ctypes.c_size_t]
@@ -343,6 +348,220 @@ def check_edit_mode(exe: Path, appdata: Path, report: Path) -> None:
             proc.wait(timeout=90)
         except subprocess.TimeoutExpired:
             kill_tree(proc.pid)
+
+
+# ----------------------------------------------------------------------------- folder zones
+
+ZONE_ID = "ci"
+ZONE_GEO = (40, 330, 340, 260)  # x, y, width, height: lower left, away from the verse
+
+
+def double_click(x: int, y: int) -> None:
+    user32.SetCursorPos(x, y)
+    time.sleep(0.2)
+    for _ in range(2):
+        user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        time.sleep(0.06)
+
+
+def right_click(x: int, y: int) -> None:
+    MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP = 0x0008, 0x0010
+    user32.SetCursorPos(x, y)
+    time.sleep(0.2)
+    user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+    time.sleep(0.05)
+    user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+
+
+def saved_zone(appdata: Path) -> dict:
+    try:
+        data = json.loads((appdata / "settings.json").read_text(encoding="utf-8"))
+        return next((z for z in data.get("zones", []) if z.get("id") == ZONE_ID), {})
+    except (OSError, ValueError):
+        return {}
+
+
+def wait_for(predicate, timeout: float = 5.0, step: float = 0.2):
+    end = time.time() + timeout
+    while True:
+        value = predicate()
+        if value or time.time() > end:
+            return value
+        time.sleep(step)
+
+
+def item_center(zone_rect, index: int) -> tuple[int, int]:
+    """Centre of an item's icon, from the zone window's own layout constants."""
+    from versedesk.ui.zone_widget import CELL_H, CELL_W, ICON, PAD, TITLE_H
+
+    l, t, r, _b = zone_rect
+    cols = max(1, ((r - l) - 2 * PAD) // CELL_W)
+    row, col = divmod(index, cols)
+    return l + PAD + col * CELL_W + CELL_W // 2, t + TITLE_H + PAD // 2 + row * CELL_H + 6 + ICON // 2
+
+
+def ole_drag_file(path: Path, target: tuple[int, int]) -> object:
+    """A real OLE drag (as Explorer makes one) of ``path`` onto ``target``: the source offers
+    Copy, Move and Link with Move proposed.  Returns the action the drop target chose."""
+    import threading
+
+    from PySide6.QtCore import QMimeData, Qt, QUrl
+    from PySide6.QtGui import QDrag
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    app = QApplication.instance() or QApplication([])
+    src = QWidget()
+    src.setWindowTitle("VerseDesk CI drag source")
+    src.setGeometry(60, 140, 160, 70)
+    src.show()
+    for _ in range(20):
+        app.processEvents()
+        time.sleep(0.05)
+    sx, sy = src.geometry().center().x(), src.geometry().center().y()
+    user32.SetCursorPos(sx, sy)
+    time.sleep(0.2)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+
+    def drive():
+        time.sleep(0.8)
+        steps = 30
+        for i in range(1, steps + 1):
+            user32.SetCursorPos(sx + (target[0] - sx) * i // steps, sy + (target[1] - sy) * i // steps)
+            time.sleep(0.04)
+        time.sleep(0.6)
+        user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+    threading.Thread(target=drive, daemon=True).start()
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile(str(path))])
+    drag = QDrag(src)
+    drag.setMimeData(mime)
+    result = drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction | Qt.DropAction.LinkAction,
+                       Qt.DropAction.MoveAction)
+    src.close()
+    app.processEvents()
+    return result
+
+
+def popup_windows_of(pid: int) -> list[int]:
+    return [w for w in top_level_windows()
+            if api.IsWindowVisible(w) and api.process_id(w) == pid and "Popup" in api.class_name(w)]
+
+
+def check_zones(exe: Path, appdata: Path, report: Path) -> None:
+    """Folder zones on the real desktop: styles, every pixel takes the mouse, an OLE drop is
+    taken as a LINK (the original stays), 구역에서 빼기, double-click opens, collapse."""
+    from PySide6.QtCore import Qt
+
+    base = Path(os.environ.get("TEMP", str(report))) / "VerseDeskCI"
+    shutil.rmtree(base, ignore_errors=True)
+    folder = base / "CI Folder"
+    folder.mkdir(parents=True)
+    (folder / "inside.txt").write_text("keep", encoding="utf-8")
+    doc = base / "CI File.txt"
+    doc.write_text("original", encoding="utf-8")
+    gone = base / "Gone.txt"
+    dropped = base / "CI Drop.txt"
+    dropped.write_text("drop me", encoding="utf-8")
+
+    settings_path = appdata / "settings.json"
+    data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+    x, y, w, h = ZONE_GEO
+    data["zones"] = [{"id": ZONE_ID, "name": "CI 구역", "x": x, "y": y, "width": w, "height": h,
+                      "collapsed": False, "items": [str(folder), str(doc), str(gone)]}]
+    settings_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    proc = subprocess.Popen([str(exe), "--exit-after", "80"])
+    keeper = None
+    try:
+        zone = find_window(f"VerseDesk Zone {ZONE_ID}", 60)
+        if not expect("zones: the zone window appears", bool(zone)):
+            return
+        time.sleep(3)
+        ex = api.ex_style(zone)
+        owner = api.h(api.GetWindow(zone, api.GW_OWNER))
+        expect("zones: tool window that never activates (TOOLWINDOW+NOACTIVATE)",
+               bool(ex & api.WS_EX_TOOLWINDOW) and bool(ex & api.WS_EX_NOACTIVATE), flags_text(ex))
+        expect("zones: takes clicks and drops (not WS_EX_TRANSPARENT)", not ex & api.WS_EX_TRANSPARENT, flags_text(ex))
+        expect("zones: not topmost and not owned by Explorer", not ex & api.WS_EX_TOPMOST and owner == 0,
+               f"{flags_text(ex)} owner={api.describe(owner)}")
+        expect("zones: sits directly above the desktop (with the verse)", check_placement(zone, find_desktop_host())[0])
+
+        minimize_consoles()
+        keeper = subprocess.Popen([sys.executable, "-c", (
+            "import tkinter as tk; r = tk.Tk(); r.title('VerseDesk CI keeper'); "
+            "r.geometry('200x100+620+560'); r.after(240000, r.destroy); r.mainloop()")])
+        find_window("VerseDesk CI keeper", 30)
+        time.sleep(2)
+        rect = api.window_rect(zone)
+        l, t, r, b = rect
+        grid = [(px, py) for py in range(t + 1, b - 1, 6) for px in range(l + 1, r - 1, 6)]
+        roots = [root_at(px, py) for px, py in grid]
+        leaks = [pt for pt, root in zip(grid, roots) if root != zone]
+        expect("zones: every part of the box catches the mouse (nothing falls through)", not leaks,
+               f"{len(grid)} points, {len(leaks)} reached another window" + (f", e.g. {leaks[0]}" if leaks else ""))
+        print_crop("zone-start", zone)
+
+        # A real OLE drag offering Copy|Move|Link (Move proposed) must be taken as a Link.
+        before = list(saved_zone(appdata).get("items", []))
+        result = ole_drag_file(dropped, ((l + r) // 2, (t + b) // 2 + 30))
+        expect("zones: a dropped file is taken as a LINK (never Move or Copy)", result == Qt.DropAction.LinkAction,
+               f"drop target chose {result}")
+        items = wait_for(lambda: [i for i in saved_zone(appdata).get("items", []) if i.lower() == str(dropped).lower()])
+        expect("zones: the dropped file is registered in settings.json", bool(items),
+               f"before={before} after={saved_zone(appdata).get('items')}")
+        expect("zones: the dropped original is still in its place, unchanged",
+               dropped.exists() and dropped.read_text(encoding="utf-8") == "drop me")
+        time.sleep(1.5)
+        print_crop("zone-after-drop", zone)
+
+        # 구역에서 빼기 via the right-click menu: the item leaves the list, the file stays.
+        index = len(saved_zone(appdata).get("items", [])) - 1
+        right_click(*item_center(rect, index))
+        popups = wait_for(lambda: popup_windows_of(api.process_id(zone)), timeout=5)
+        if expect("zones: right-click on an item opens its menu", bool(popups)):
+            pl, pt_, pr, pb = api.window_rect(popups[0])
+            click((pl + pr) // 2, pt_ + min(18, (pb - pt_) // 2))
+            gone_from_list = wait_for(lambda: not any(i.lower() == str(dropped).lower()
+                                                       for i in saved_zone(appdata).get("items", [])))
+            expect("zones: 구역에서 빼기 removes the item from the zone", bool(gone_from_list),
+                   f"items={saved_zone(appdata).get('items')}")
+            expect("zones: ...and the original file is left alone", dropped.exists())
+
+        # Double-click the folder item: Explorer opens it.
+        before_windows = set(top_level_windows())
+        double_click(*item_center(rect, 0))
+        opened = wait_for(lambda: [w2 for w2 in top_level_windows() if w2 not in before_windows
+                                   and api.class_name(w2) == "CabinetWClass" and api.IsWindowVisible(w2)], timeout=15)
+        expect("zones: double-clicking a folder opens it in Explorer", bool(opened),
+               f"{api.describe(opened[0])}" if opened else "no new Explorer window")
+        for w2 in opened or []:
+            user32.PostMessageW(w2, 0x0010, 0, 0)  # WM_CLOSE
+
+        # Collapse and expand with the title bar button.
+        click(r - 15, t + 15)
+        collapsed = wait_for(lambda: saved_zone(appdata).get("collapsed") is True)
+        cl, ct, cr, cb = api.window_rect(zone)
+        expect("zones: the collapse button leaves only the title bar (saved)", bool(collapsed) and cb - ct <= 40,
+               f"height {cb - ct}, collapsed={saved_zone(appdata).get('collapsed')}")
+        click(r - 15, t + 15)
+        expanded = wait_for(lambda: saved_zone(appdata).get("collapsed") is False)
+        el, et, er, eb = api.window_rect(zone)
+        expect("zones: pressing it again shows the items again (saved)", bool(expanded) and eb - et == b - t,
+               f"height {eb - et} (was {b - t})")
+        expect("zones: originals in the zone were never touched",
+               folder.is_dir() and (folder / "inside.txt").read_text(encoding="utf-8") == "keep"
+               and doc.read_text(encoding="utf-8") == "original")
+    finally:
+        if keeper is not None:
+            keeper.kill()
+        try:
+            code = proc.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            code = None
+        expect("zones: the app quits cleanly", code == 0, f"exit code {code}")
 
 
 def kill_tree(pid: int) -> None:
@@ -662,6 +881,9 @@ def run(exe: Path, report: Path) -> None:
 
     # 배치 편집 (edit mode): drag, save, restore after a restart.
     check_edit_mode(exe, appdata, report)
+
+    # 폴더 구역 (folder zones).
+    check_zones(exe, appdata, report)
 
     log = appdata / "log.txt"
     if log.exists():
