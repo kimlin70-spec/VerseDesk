@@ -154,12 +154,18 @@
 
 ## 8. 말씀 데이터 출처
 
-- 번역본: **Berean Standard Bible (BSB)** — 퍼블릭 도메인. 원문 파일 머리말: *"This text of God's Word has been dedicated to the public domain."*
+- 번역본: **Berean Standard Bible (BSB)** — 2023년 4월 30일부터 퍼블릭 도메인(<https://berean.bible/terms.htm>: *"officially dedicated to the public domain as of April 30, 2023. All uses are freely permitted."*).
+  출판사는 원문을 그대로 쓰는 프로그램이 BSB 이름을 쓰는 것을 권하고, 원문을 바꾼 경우에는 BSB 이름을 쓰지 말아 달라고 요청합니다. 그래서 내장 구절은 글자 하나 바꾸지 않았습니다.
+- 출처 표시(필수는 아니지만 권장되는 문구, 원문 파일 머리말 그대로): *"The Holy Bible, Berean Standard Bible, BSB is produced in cooperation with Bible Hub, Discovery Bible, unfoldingWord, Bible Aquifer, OpenBible.com, and the Berean Bible Translation Committee. This text of God's Word has been dedicated to the public domain."*
 - 원문 파일: <https://bereanbible.com/bsb.txt> — 공식 다운로드 페이지 <https://berean.bible/downloads.htm> 의 "Berean Standard Bible - Text"
   - 받은 날짜: 2026-11-12, SHA-256 `2ac3af1de52d4e68261cba91d85c320b7eadc6560e830d99e591767b8ff5ca96`
+  - 판(edition): 파일 안에 판 표시가 없어서 서버의 수정 시각(`Last-Modified: Fri, 31 Jul 2026 14:02:14 GMT`)과 공식 변경 기록 <https://bereanbible.com/changelog.txt> 의 마지막 항목(2026-07-31, 2 Timothy 1:15 "province")이 반영된 본문임을 확인해 기록했습니다. 출판사는 같은 주소의 파일을 고쳐 올리므로, 나중에 다시 받으면 해시가 달라질 수 있습니다.
 - 시편 표제(예: "A Psalm of David.") 처리: bsb.txt 에는 표제가 1절 앞에 붙어 있어서, 공식 USFM 파일 <https://bereanbible.com/bsb_usfm.zip> (SHA-256 `f0c56438eb89c98e8f62c5c00461e25cc35b098ad5b179bc350cede759ee5f87`) 의 `\d` 표시로 표제 문장을 확인하고, 1절이 정확히 그 문장으로 시작할 때만 그 부분을 떼어 냈습니다.
 - 본문은 손으로 입력하지 않았습니다. `tools/verse_plan.tsv` (날짜 → 구절 위치 목록)와 `tools/build_verses.py` 가 원문 파일에서 그대로 복사해 `versedesk/data/verses.json` 을 만듭니다. 여러 절은 공백 하나로 이어 붙였습니다.
 - 구절 선정: 묵상과 암송에 널리 쓰이는 1~3절 분량의 구절, 366일(2월 29일 포함) 모두 서로 다른 구절.
+  새해(1/1), 성탄 전야·성탄절(12/24·25), 한 해의 마지막 날(12/31) 같은 날에는 그날에 맞는 구절을 두었고,
+  12월에는 성탄을 기다리는 구절, 3월 말~4월 초에는 고난과 부활의 구절이 오도록 배치했습니다(부활절 날짜는 해마다 달라서 대략적인 시기에 맞췄습니다).
+- 원문 구절이 다른 절에서 시작된 따옴표로 끝나는 경우(예: 문장 끝의 `”`)도 원문 그대로 두었습니다.
 
 ## 9. 바탕화면 고정이 이상할 때 (고급)
 

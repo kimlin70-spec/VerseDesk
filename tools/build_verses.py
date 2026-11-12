@@ -91,6 +91,8 @@ def build(plan_rows: list[tuple[str, str]], bible: bsb.Bible) -> tuple[dict, lis
         "source": {
             "file": bsb.SOURCES["bsb.txt"]["url"],
             "sha256": bsb.SOURCES["bsb.txt"]["sha256"],
+            "last_modified": bsb.SOURCES["bsb.txt"]["last_modified"],
+            "edition": bsb.SOURCES["bsb.txt"]["edition"],
             "superscriptions_from": bsb.SOURCES["bsb_usfm.zip"]["url"],
             "downloads_page": "https://berean.bible/downloads.htm",
             "retrieved": RETRIEVED,

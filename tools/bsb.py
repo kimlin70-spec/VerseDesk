@@ -36,6 +36,10 @@ SOURCES = {
     "bsb.txt": {
         "url": "https://bereanbible.com/bsb.txt",
         "sha256": "2ac3af1de52d4e68261cba91d85c320b7eadc6560e830d99e591767b8ff5ca96",
+        # bsb.txt carries no edition string; the publisher replaces it in place.  This copy:
+        "last_modified": "Fri, 31 Jul 2026 14:02:14 GMT",
+        "edition": ("text as of the official changelog entry of 7-31-2026 "
+                    "(https://bereanbible.com/changelog.txt; e.g. 2 Timothy 1:15 'province')"),
     },
     "bsb_usfm.zip": {
         "url": "https://bereanbible.com/bsb_usfm.zip",

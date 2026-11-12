@@ -9,7 +9,7 @@
 Override file format (UTF-8; a bare list is also accepted):
 
     {"verses": [
-        {"date": "12-25", "reference": "Luke 2:11 (BSB)", "text": "For unto you ..."}
+        {"date": "12-25", "reference": "Book 1:2 (BSB)", "text": "the verse text ..."}
     ]}
 
 "date" accepts "12-25", "12/25", "1-5" etc.  "text" is required; "reference" may be empty.
