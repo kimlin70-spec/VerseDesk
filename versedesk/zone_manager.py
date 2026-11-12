@@ -29,8 +29,9 @@ RECHECK_MS = 30_000  # how often to notice originals that were moved, deleted or
 CASCADE = 32
 
 NOTE_CREATED = (
-    "폴더나 파일을 탐색기·바탕화면에서 이 상자로 끌어다 놓으면 등록됩니다(원본은 그대로). "
-    "위치와 크기는 트레이 메뉴의 '배치 편집 켜기'에서 바꿀 수 있습니다."
+    "구역은 바탕화면에 붙어 있어 열린 창 뒤에 생깁니다(창을 내리거나 Win+D). "
+    "폴더나 파일을 이 상자로 끌어다 놓으면 등록됩니다(원본은 그대로). "
+    "옮기기·크기 바꾸기는 트레이 메뉴 → '배치 편집 켜기'."
 )
 
 
@@ -60,7 +61,7 @@ class ZoneManager(QObject):
         self.io.state_ready.connect(self._on_state)
         self.io.open_finished.connect(self._on_open_finished)
         self.widgets: dict[str, ZoneWidget] = {}
-        self._states: dict[str, tuple[bool, bool, QPixmap | None]] = {}  # path key -> state
+        self._states: dict[str, tuple[bool, bool, QPixmap | None, str]] = {}  # key -> exists, is_dir, icon, name
         self._edit = False
         self._started = False
         self._recheck = QTimer(self)
@@ -132,7 +133,8 @@ class ZoneManager(QObject):
             v = ItemView(path=p, name=display_name(p))
             state = self._states.get(path_key(p))
             if state is not None:
-                v.exists, v.is_dir, v.pixmap = state
+                v.exists, v.is_dir, v.pixmap = state[0], state[1], state[2]
+                v.name = state[3] or v.name
             views.append(v)
         w.set_zone(z.name, views, z.collapsed, z.width, z.height)
         self._position(w, z, index)
@@ -320,15 +322,16 @@ class ZoneManager(QObject):
 
     # ------------------------------------------------------------------ background results
 
-    def _on_state(self, path: str, exists: bool, is_dir: bool, image: QImage) -> None:
+    def _on_state(self, path: str, exists: bool, is_dir: bool, name: str, image: QImage) -> None:
         k = path_key(path)
         old = self._states.get(k)
         pixmap = QPixmap.fromImage(image) if not image.isNull() else (old[2] if old else None)
-        self._states[k] = (exists, is_dir, pixmap)
+        name = name or (old[3] if old else "")
+        self._states[k] = (exists, is_dir, pixmap, name)
         for w in self.widgets.values():
             for item in w.items:
                 if path_key(item.path) == k:
-                    w.set_item_state(item.path, exists, is_dir, pixmap)
+                    w.set_item_state(item.path, exists, is_dir, pixmap, name)
 
     def _on_open_finished(self, path: str, error: str) -> None:
         if error:
@@ -344,7 +347,7 @@ class ZoneManager(QObject):
     def diagnostics(self) -> str:
         lines = [f"zones: {len(self.zones)}"]
         for z in self.zones:
-            missing = sum(1 for p in z.items if (self._states.get(path_key(p)) or (True,))[0] is False)
+            missing = sum(1 for p in z.items if (self._states.get(path_key(p)) or (True,))[0] is False)  # noqa: E501
             lines.append(f"  {z.id} {z.name!r}: {len(z.items)} items ({missing} missing), "
                          f"collapsed={z.collapsed} at ({z.x}, {z.y}) {z.width}x{z.height}")
         return "\n".join(lines)

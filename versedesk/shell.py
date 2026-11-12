@@ -33,17 +33,18 @@ def guess_is_dir(path: str) -> bool:
     return not ntpath.splitext(path.rstrip("\\/"))[1]
 
 
-def icon_bgra(path: str, exists: bool, is_dir: bool) -> tuple[int, int, bytes] | None:
-    """The system icon as (width, height, BGRA bytes), or None to use a generic icon."""
+def shell_info(path: str, exists: bool, is_dir: bool) -> tuple[str | None, tuple[int, int, bytes] | None]:
+    """(the name Explorer shows, the system icon as (width, height, BGRA bytes)); None for
+    either means: use the file name / a generic icon."""
     if not IS_WINDOWS:
-        return None
+        return None, None
     try:
         from versedesk.win32 import shell as win_shell
 
-        return win_shell.file_icon_bgra(path, exists, is_dir)
+        return win_shell.shell_info(path, exists, is_dir)
     except Exception:
         log.exception("could not get the icon of %s", path)
-        return None
+        return None, None
 
 
 def open_path(path: str) -> str | None:

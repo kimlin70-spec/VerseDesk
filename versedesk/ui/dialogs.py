@@ -51,10 +51,13 @@ def confirm_delete_zone(name: str, item_count: int) -> bool:
     box.setIcon(QMessageBox.Icon.Question)
     box.setWindowTitle(TITLE_DELETE)
     box.setText(f"'{name}' 구역을 삭제할까요?")
-    box.setInformativeText(
-        f"구역에 넣어 둔 폴더·파일 {item_count}개는 원래 자리에 그대로 남습니다.\n"
-        "(구역의 목록에서만 사라집니다.)"
-    )
+    if item_count:
+        box.setInformativeText(
+            f"구역에 넣어 둔 폴더·파일 {item_count}개는 원래 자리에 그대로 남습니다.\n"
+            "(구역의 목록에서만 사라집니다.)"
+        )
+    else:
+        box.setInformativeText("빈 구역입니다. 컴퓨터의 폴더·파일에는 아무 영향이 없습니다.")
     delete = box.addButton("삭제", QMessageBox.ButtonRole.AcceptRole)
     cancel = box.addButton("취소", QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(cancel)

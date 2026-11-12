@@ -36,9 +36,10 @@ def test_worker_reports_states_and_opens_off_the_gui_thread(qapp, tmp_path):
         opened.append(path)
         return "boom" if path.endswith("bad") else None
 
-    io = ZoneIO(probe=probe, icon=lambda p, e, d: (1, 1, b"\x00\x00\xff\xff"), opener=opener)
+    io = ZoneIO(probe=probe, info=lambda p, e, d: ("이름", (1, 1, b"\x00\x00\xff\xff")), opener=opener)
     states, finished = [], []
-    io.state_ready.connect(lambda p, e, d, img: states.append((p, e, d, img.width())))
+    io.state_ready.connect(lambda p, e, d, name, img: states.append((p, e, d, img.width())) or names.append(name))
+    names = []
     io.open_finished.connect(lambda p, err: finished.append((p, err)))
     io.check([str(f), str(tmp_path / "missing")], force_icon=True)
     io.open(str(f))
@@ -48,6 +49,7 @@ def test_worker_reports_states_and_opens_off_the_gui_thread(qapp, tmp_path):
     assert (str(tmp_path / "missing"), False, True, 1) in states  # no extension: shown as a folder
     assert finished == [(str(f), ""), (str(tmp_path / "bad"), "boom")]
     assert threads == {"zone-probe", "zone-open"}
+    assert set(names) == {"이름"}
     # unchanged state: no new report unless an icon is asked for
     io.check([str(f)])
     time.sleep(0.2)
@@ -67,7 +69,8 @@ def test_windows_icons_for_folders_files_and_missing_paths(qapp, tmp_path):
     from versedesk.win32 import shell as ws
 
     ws.init_thread_com()
-    folder = ws.file_icon_bgra(os.environ.get("SystemRoot", "C:\\Windows"), True, True)
+    name, folder = ws.shell_info(os.environ.get("SystemRoot", "C:\\Windows"), True, True)
+    assert name  # Explorer's display name
     assert folder is not None and folder[0] >= 16 and len(folder[2]) == folder[0] * folder[1] * 4
     assert any(folder[2][3::4])  # has visible pixels
     f = tmp_path / "doc.txt"

@@ -174,3 +174,26 @@ def test_every_pixel_catches_the_mouse_at_fractional_scaling(qapp):
             low = min(img.pixelColor(x, y).alpha() for x in range(img.width()) for y in range(img.height()))
             assert low >= 2, (dpr, size, low)
             w.deleteLater()
+
+
+def test_the_item_count_stays_visible_with_a_long_name(qapp):
+    from PySide6.QtGui import QPainter
+
+    w = ZoneWidget("z")
+    w.set_zone("2026년 상반기 프로젝트 보고서 및 회의록 모음 자료", item_views([f"C:\\f{i}" for i in range(12)]),
+               False, 200, 200)
+    shown = []
+    original = QPainter.drawText
+
+    def spy(self, *args):
+        if len(args) == 3 and isinstance(args[2], str):
+            shown.append(args[2])
+        return original(self, *args)
+
+    QPainter.drawText = spy
+    try:
+        w.grab()
+    finally:
+        QPainter.drawText = original
+    assert any(t.endswith("(12)") for t in shown), shown
+    w.deleteLater()

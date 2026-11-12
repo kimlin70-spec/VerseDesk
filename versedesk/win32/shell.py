@@ -38,6 +38,7 @@ ole32 = ctypes.WinDLL("ole32", use_last_error=True)
 SHGFI_ICON = 0x000000100
 SHGFI_LARGEICON = 0x000000000
 SHGFI_SYSICONINDEX = 0x000004000
+SHGFI_DISPLAYNAME = 0x000000200
 SHGFI_USEFILEATTRIBUTES = 0x000000010
 SHIL_EXTRALARGE = 0x2  # 48x48: sharp at 100% (scaled down) and exact at 150%
 ILD_TRANSPARENT = 0x00000001
@@ -45,6 +46,8 @@ FILE_ATTRIBUTE_DIRECTORY = 0x10
 FILE_ATTRIBUTE_NORMAL = 0x80
 
 SEE_MASK_NOASYNC = 0x00000100
+SEE_MASK_FLAG_NO_UI = 0x00000400  # no Windows error boxes (and no 'delete this broken shortcut?')
+ERROR_NO_ASSOCIATION = 1155
 SEE_MASK_FLAG_LOG_USAGE = 0x04000000
 SW_SHOWNORMAL = 1
 
@@ -250,15 +253,24 @@ def _extra_large_icon(index: int):
 
 
 def file_icon_bgra(path: str, exists: bool, is_dir: bool) -> tuple[int, int, bytes] | None:
-    """The system icon Explorer shows for ``path`` (a generic one when it is missing):
-    48x48 from the system image list when possible, else the 32x32 large icon."""
+    return shell_info(path, exists, is_dir)[1]
+
+
+def shell_info(path: str, exists: bool, is_dir: bool) -> tuple[str | None, tuple[int, int, bytes] | None]:
+    """(the name Explorer shows, the system icon) for ``path``.  The name follows the user's
+    Explorer settings: '다운로드' for the Downloads folder, no '.lnk' on shortcuts, file
+    extensions hidden if Explorer hides them.  The icon is 48x48 from the system image
+    list when possible, else the 32x32 large icon; a generic one when the path is missing."""
     attributes = 0
     lookup = 0
     if not exists:
         lookup = SHGFI_USEFILEATTRIBUTES  # do not touch the disk: icon by name/extension only
         attributes = FILE_ATTRIBUTE_DIRECTORY if is_dir else FILE_ATTRIBUTE_NORMAL
     sfi = SHFILEINFOW()
-    if SHGetFileInfoW(path, attributes, ctypes.byref(sfi), ctypes.sizeof(sfi), SHGFI_SYSICONINDEX | lookup):
+    name = None
+    if SHGetFileInfoW(path, attributes, ctypes.byref(sfi), ctypes.sizeof(sfi),
+                      SHGFI_SYSICONINDEX | SHGFI_DISPLAYNAME | lookup):
+        name = sfi.szDisplayName or None
         try:
             hicon = _extra_large_icon(sfi.iIcon)
         except Exception:
@@ -267,15 +279,15 @@ def file_icon_bgra(path: str, exists: bool, is_dir: bool) -> tuple[int, int, byt
             try:
                 data = hicon_to_bgra(hicon)
                 if data is not None:
-                    return data
+                    return name, data
             finally:
                 DestroyIcon(hicon)
     sfi = SHFILEINFOW()
     if not SHGetFileInfoW(path, attributes, ctypes.byref(sfi), ctypes.sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON | lookup) \
             or not sfi.hIcon:
-        return None
+        return name, None
     try:
-        return hicon_to_bgra(sfi.hIcon)
+        return name, hicon_to_bgra(sfi.hIcon)
     finally:
         DestroyIcon(sfi.hIcon)
 
@@ -328,21 +340,29 @@ def allow_foreground() -> None:
         pass
 
 
-def open_path(path: str) -> str | None:
-    """Open a folder in Explorer or a file in its program. Returns None or an error text."""
+def _shell_execute(path: str, verb: str | None) -> int:
     info = SHELLEXECUTEINFOW()
     info.cbSize = ctypes.sizeof(SHELLEXECUTEINFOW)
-    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_LOG_USAGE
-    info.lpVerb = None  # the default action, exactly what a double-click in Explorer does
+    # NO_UI: VerseDesk reports problems itself.  Without it Windows shows its own error boxes,
+    # including "이 바로 가기를 삭제하시겠습니까?" for a shortcut whose target is gone, which would
+    # delete the user's original .lnk file.
+    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_LOG_USAGE | SEE_MASK_FLAG_NO_UI
+    info.lpVerb = verb  # None = the default action, exactly what a double-click in Explorer does
     info.lpFile = path
     info.lpDirectory = os.path.dirname(path) or None
     info.nShow = SW_SHOWNORMAL
-    allow_foreground()
     with clean_launch_environment():
         ok = ShellExecuteExW(ctypes.byref(info))
         err = ctypes.get_last_error()
-    if ok:
-        return None
-    if err == 1223:  # ERROR_CANCELLED: the user closed an "Open with" dialog
+    return 0 if ok else (err or 1)
+
+
+def open_path(path: str) -> str | None:
+    """Open a folder in Explorer or a file in its program. Returns None or an error text."""
+    allow_foreground()
+    err = _shell_execute(path, None)
+    if err == ERROR_NO_ASSOCIATION:  # no program for this file type: offer Windows' "Open with"
+        err = _shell_execute(path, "openas")
+    if err in (0, 1223):  # 1223 = ERROR_CANCELLED: the user closed the "Open with" chooser
         return None
     return ctypes.FormatError(err).strip() or f"error {err}"

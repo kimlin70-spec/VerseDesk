@@ -17,13 +17,14 @@ from versedesk.zone_manager import ZoneManager
 class FakeIO(QObject):
     """Synchronous stand-in for ZoneIO (no threads in unit tests)."""
 
-    state_ready = Signal(str, bool, bool, QImage)
+    state_ready = Signal(str, bool, bool, str, QImage)
     open_finished = Signal(str, str)
 
     def __init__(self, open_error=""):
         super().__init__()
         self.checked, self.opened = [], []
         self.open_error = open_error
+        self.names = {}
 
     def start(self):
         pass
@@ -34,7 +35,7 @@ class FakeIO(QObject):
     def check(self, paths, force_icon=False):
         for p in paths:
             self.checked.append(p)
-            self.state_ready.emit(p, os.path.exists(p), os.path.isdir(p), QImage())
+            self.state_ready.emit(p, os.path.exists(p), os.path.isdir(p), self.names.get(p, ""), QImage())
 
     def open(self, path):
         self.opened.append(path)
@@ -252,3 +253,16 @@ def test_new_zones_do_not_cover_each_other_and_come_to_the_front(qapp, tmp_path)
     first = list(m.widgets.values())[0]
     first.pressed.emit()
     assert m.layer.front == id(first)
+
+
+def test_items_show_the_name_explorer_shows(qapp, tmp_path, originals):
+    """Explorer hides .lnk and shows Korean names for special folders: the zone does too."""
+    folder, f = originals
+    io = FakeIO()
+    io.names[str(f)] = "계획"
+    m, store, notes = _manager(qapp, tmp_path, io=io)
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    m.add_items(zid, [str(folder), str(f)])
+    assert [i.name for i in m.widgets[zid].items] == ["보고서", "계획"]
+    assert _saved(tmp_path)[0]["items"] == [str(folder), str(f)]  # the stored paths are untouched

@@ -57,7 +57,8 @@ TEXT_DELETE_ZONE = "구역 삭제"
 TIP_MISSING = "찾을 수 없음 (원래 자리에서 옮겨졌거나 삭제됨)"
 TIP_COLLAPSE = "접기"
 TIP_EXPAND = "펼치기"
-EMPTY_HINT = "폴더나 파일을 여기로 끌어다 놓으세요\n(원본은 그대로, 바로가기처럼 등록됩니다)"
+EMPTY_HINT = ("폴더나 파일을 여기로 끌어다 놓으세요\n(원본은 그대로, 바로가기처럼 등록됩니다)\n\n"
+              "옮기기·크기 바꾸기: 트레이 메뉴 → 배치 편집 켜기")
 
 
 @dataclass
@@ -149,12 +150,14 @@ class ZoneWidget(DesktopWidget):
         self._hover = -1
         self.update()
 
-    def set_item_state(self, path: str, exists: bool, is_dir: bool, pixmap: QPixmap | None) -> None:
+    def set_item_state(self, path: str, exists: bool, is_dir: bool, pixmap: QPixmap | None, name: str = "") -> None:
         for item in self._items:
             if item.path == path:
                 item.exists, item.is_dir = exists, is_dir
                 if pixmap is not None and not pixmap.isNull():
                     item.pixmap = pixmap
+                if name:
+                    item.name = name  # what Explorer shows (e.g. 다운로드, no .lnk)
         self.update()
 
     def set_collapsed(self, collapsed: bool) -> None:
@@ -250,11 +253,13 @@ class ZoneWidget(DesktopWidget):
             p.restore()
             p.setFont(self._title_font)
             fm = QFontMetrics(self._title_font)
-            label = f"{self._name} ({len(self._items)})"
+            suffix = f" ({len(self._items)})"  # the count is always shown; only the name is shortened
             text_w = self.width() - TITLE_H - 12
+            name_w = max(0, text_w - fm.horizontalAdvance(suffix))
+            label = fm.elidedText(self._name, Qt.TextElideMode.ElideRight, name_w) + suffix
             p.setPen(TEXT_COLOR)
             p.drawText(QRect(12, 0, text_w, TITLE_H), int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
-                       fm.elidedText(label, Qt.TextElideMode.ElideRight, text_w))
+                       label)
             self._paint_chevron(p, self.collapse_button_rect())
 
             if not self._collapsed:
@@ -329,6 +334,8 @@ class ZoneWidget(DesktopWidget):
                 QToolTip.showText(e.globalPos(), item.path + (f"\n{TIP_MISSING}" if item.exists is False else ""), self)
             elif self.collapse_button_rect().contains(pos):
                 QToolTip.showText(e.globalPos(), TIP_EXPAND if self._collapsed else TIP_COLLAPSE, self)
+            elif pos.y() < TITLE_H:
+                QToolTip.showText(e.globalPos(), f"{self._name} — 항목 {len(self._items)}개", self)
             else:
                 QToolTip.hideText()
             return True

@@ -33,8 +33,8 @@ def bgra_to_qimage(data: tuple[int, int, bytes] | None) -> QImage:
 
 
 class ZoneIO(QObject):
-    # path, exists, is_dir, icon (a null QImage means: use a generic icon)
-    state_ready = Signal(str, bool, bool, QImage)
+    # path, exists, is_dir, Explorer's name for it ("" = unknown), icon (null = use a generic icon)
+    state_ready = Signal(str, bool, bool, str, QImage)
     # path, error text ("" when it opened)
     open_finished = Signal(str, str)
 
@@ -43,12 +43,12 @@ class ZoneIO(QObject):
         parent: QObject | None = None,
         *,
         probe: Callable[[str], tuple[bool, bool]] = shell.probe,
-        icon: Callable[[str, bool, bool], tuple[int, int, bytes] | None] = shell.icon_bgra,
+        info: Callable[[str, bool, bool], tuple[str | None, tuple[int, int, bytes] | None]] = shell.shell_info,
         opener: Callable[[str], str | None] = shell.open_path,
     ):
         super().__init__(parent)
         self._probe = probe
-        self._icon = icon
+        self._info = info
         self._opener = opener
         self._probe_q: queue.Queue = queue.Queue()
         self._open_q: queue.Queue = queue.Queue()
@@ -106,9 +106,9 @@ class ZoneIO(QObject):
                         is_dir = self._known.get(k, (False, shell.guess_is_dir(path)))[1]
                     changed = self._known.get(k) != (exists, is_dir)
                     self._known[k] = (exists, is_dir)
-                    image = bgra_to_qimage(self._icon(path, exists, is_dir)) if (changed or force_icon) else QImage()
                     if changed or force_icon:
-                        self.state_ready.emit(path, exists, is_dir, image)
+                        name, icon = self._info(path, exists, is_dir)
+                        self.state_ready.emit(path, exists, is_dir, name or "", bgra_to_qimage(icon))
                 except Exception:
                     log.exception("checking %s failed", path)
         finally:
