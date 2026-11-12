@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}  # every main push gets its release
 
 jobs:
   windows:
@@ -99,28 +99,59 @@ jobs:
         run: python -I tools/build_verses.py --check
 
   release:
+    # Uses the GitHub CLI that is preinstalled on the runner (no third-party action to go
+    # stale). The tag names the build; the asset name never changes, so
+    # .../releases/latest/download/VerseDesk.exe is a permanent download link.
     name: publish release (main only)
     needs: windows
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: VerseDesk-exe
-          path: dist
+      - name: Download the exe built by this run
+        run: |
+          gh run download "${{ github.run_id }}" --name VerseDesk-exe --dir dist
+          test -s dist/VerseDesk.exe && ls -l dist
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          name: VerseDesk build ${{ github.run_number }}
-          make_latest: "true"
-          files: dist/VerseDesk.exe
-          body: |
-            VerseDesk.exe — 설치 없이 바로 실행하는 단일 파일입니다.
-            처음 실행할 때 Windows SmartScreen 경고가 나오면 "추가 정보" → "실행"을 누르세요.
-            자세한 사용법은 README를 참고하세요.
+      - name: Publish the release
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          cat > notes.md <<EOF
+          VerseDesk.exe — 설치 없이 바로 실행하는 단일 파일입니다.
+          처음 실행할 때 Windows SmartScreen 경고가 나오면 "추가 정보" → "실행"을 누르세요.
+          자세한 사용법은 README를 참고하세요.
 
-            commit ${{ github.sha }}
+          commit ${SHA}
+          EOF
+          gh release create "build-${{ github.run_number }}" dist/VerseDesk.exe \
+            --target "${SHA}" --title "VerseDesk build ${{ github.run_number }}" \
+            --notes-file notes.md --latest
+
+  release-dry-run:
+    # On other branches: exercise the same download and GitHub CLI access without publishing.
+    name: release dry run (other branches)
+    needs: windows
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download the exe built by this run
+        run: |
+          gh run download "${{ github.run_id }}" --name VerseDesk-exe --dir dist
+          test -s dist/VerseDesk.exe && ls -l dist
+
+      - name: GitHub CLI can read releases
+        run: gh release list --limit 3

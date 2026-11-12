@@ -18,7 +18,9 @@
 
 ### 방법 B — Releases에서 받기 (main 브랜치에 반영된 뒤)
 
-- <https://github.com/kimlin70-spec/VerseDesk/releases/latest> → **Assets** → `VerseDesk.exe` (로그인 없이 받을 수 있습니다)
+- 바로 받기(항상 최신 판): <https://github.com/kimlin70-spec/VerseDesk/releases/latest/download/VerseDesk.exe> — 로그인 없이 받을 수 있습니다.
+- 또는 <https://github.com/kimlin70-spec/VerseDesk/releases/latest> → **Assets** → `VerseDesk.exe`
+- 방법 A의 Actions 파일은 GitHub 로그인이 필요하고 일정 기간이 지나면 지워지지만, Releases 파일은 계속 남습니다.
 
 ## 2. 놓아 둘 곳과 실행
 
