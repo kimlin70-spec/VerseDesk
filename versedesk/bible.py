@@ -52,75 +52,77 @@ def _b(name: str, korean: str, english: str = "") -> Book:
     return Book(name, tuple(korean.split()), tuple(a.strip() for a in english.split(",") if a.strip()))
 
 
-# Korean: 개역개정 name and abbreviation first, then 새번역 / 가톨릭 성경 (2005) forms.
+# Korean: 개역개정 name and abbreviation first, then 새번역 forms and common shorthand.
 # Spaces inside names do not matter ("요한 복음" = "요한복음"), so they are written without.
+# (가톨릭 성경 names are left out on purpose: it numbers many Old Testament verses differently,
+# e.g. psalm titles count as verses, so its references would silently give other verses.)
 BOOKS: tuple[Book, ...] = (
-    _b("Genesis", "창세기 창 창세", "Gen, Ge, Gn"),
-    _b("Exodus", "출애굽기 출 탈출기 탈출", "Exod, Exo, Ex"),
-    _b("Leviticus", "레위기 레 레위", "Lev, Le, Lv"),
-    _b("Numbers", "민수기 민 민수", "Num, Nu, Nm, Nb"),
-    _b("Deuteronomy", "신명기 신 신명", "Deut, Dt, De"),
-    _b("Joshua", "여호수아 수 여호수아기 여호", "Josh, Jos, Jsh"),
-    _b("Judges", "사사기 삿 판관기 판관", "Judg, Jdg, Jg, Jdgs"),
+    _b("Genesis", "창세기 창", "Gen, Ge, Gn"),
+    _b("Exodus", "출애굽기 출", "Exod, Exo, Ex"),
+    _b("Leviticus", "레위기 레", "Lev, Le, Lv"),
+    _b("Numbers", "민수기 민", "Num, Nu, Nm, Nb"),
+    _b("Deuteronomy", "신명기 신", "Deut, Dt, De"),
+    _b("Joshua", "여호수아 수 여호수아기", "Josh, Jos, Jsh"),
+    _b("Judges", "사사기 삿", "Judg, Jdg, Jg, Jdgs"),
     _b("Ruth", "룻기 룻", "Rth, Ru"),
-    _b("1 Samuel", "사무엘상 삼상 사무엘기상 사무엘기상권 1사무", "1 Sam, 1 Sa, 1 Sm"),
-    _b("2 Samuel", "사무엘하 삼하 사무엘기하 사무엘기하권 2사무", "2 Sam, 2 Sa, 2 Sm"),
-    _b("1 Kings", "열왕기상 왕상 열왕기상권 1열왕", "1 Kgs, 1 Ki, 1 Kin"),
-    _b("2 Kings", "열왕기하 왕하 열왕기하권 2열왕", "2 Kgs, 2 Ki, 2 Kin"),
-    _b("1 Chronicles", "역대상 대상 역대지상 역대기상권 1역대", "1 Chr, 1 Chron, 1 Ch"),
-    _b("2 Chronicles", "역대하 대하 역대지하 역대기하권 2역대", "2 Chr, 2 Chron, 2 Ch"),
-    _b("Ezra", "에스라 스 에스라기 에즈라기 에즈", "Ezr"),
-    _b("Nehemiah", "느헤미야 느 느헤미야기 느헤", "Neh, Ne"),
-    _b("Esther", "에스더 에 에스더기 에스테르기", "Esth, Est"),
+    _b("1 Samuel", "사무엘상 삼상 사무엘기상", "1 Sam, 1 Sa, 1 Sm"),
+    _b("2 Samuel", "사무엘하 삼하 사무엘기하", "2 Sam, 2 Sa, 2 Sm"),
+    _b("1 Kings", "열왕기상 왕상", "1 Kgs, 1 Ki, 1 Kin"),
+    _b("2 Kings", "열왕기하 왕하", "2 Kgs, 2 Ki, 2 Kin"),
+    _b("1 Chronicles", "역대상 대상 역대지상", "1 Chr, 1 Chron, 1 Ch"),
+    _b("2 Chronicles", "역대하 대하 역대지하", "2 Chr, 2 Chron, 2 Ch"),
+    _b("Ezra", "에스라 스 에스라기", "Ezr"),
+    _b("Nehemiah", "느헤미야 느 느헤미야기", "Neh, Ne"),
+    _b("Esther", "에스더 에 에스더기", "Esth, Est"),
     _b("Job", "욥기 욥", "Jb"),
     _b("Psalm", "시편 시", "Psalms, Ps, Psa, Pss, Psm"),
     _b("Proverbs", "잠언 잠", "Prov, Pro, Prv, Pr"),
-    _b("Ecclesiastes", "전도서 전 코헬렛 코헬", "Eccl, Eccles, Ecc, Ec, Qoh"),
+    _b("Ecclesiastes", "전도서 전", "Eccl, Eccles, Ecc, Ec, Qoh"),
     _b("Song of Solomon", "아가 아 아가서", "Song of Songs, Song, Songs, SOS, Canticles"),
-    _b("Isaiah", "이사야 사 이사야서 이사", "Isa, Is"),
+    _b("Isaiah", "이사야 사 이사야서", "Isa, Is"),
     _b("Jeremiah", "예레미야 렘 예레미야서 예레", "Jer, Je, Jr"),
     _b("Lamentations", "예레미야애가 애 애가", "Lam, La"),
-    _b("Ezekiel", "에스겔 겔 에스겔서 에제키엘서 에제", "Ezek, Eze, Ezk"),
-    _b("Daniel", "다니엘 단 다니엘서 다니", "Dan, Da, Dn"),
-    _b("Hosea", "호세아 호 호세아서 호세", "Hos, Ho"),
+    _b("Ezekiel", "에스겔 겔 에스겔서", "Ezek, Eze, Ezk"),
+    _b("Daniel", "다니엘 단 다니엘서", "Dan, Da, Dn"),
+    _b("Hosea", "호세아 호 호세아서", "Hos, Ho"),
     _b("Joel", "요엘 욜 요엘서", "Jl"),
-    _b("Amos", "아모스 암 아모스서 아모", "Am"),
-    _b("Obadiah", "오바댜 옵 오바댜서 오바드야서 오바", "Obad, Ob"),
+    _b("Amos", "아모스 암 아모스서", "Am"),
+    _b("Obadiah", "오바댜 옵 오바댜서", "Obad, Ob"),
     _b("Jonah", "요나 욘 요나서", "Jon, Jnh"),
-    _b("Micah", "미가 미 미가서 미카서 미카", "Mic, Mc"),
+    _b("Micah", "미가 미 미가서", "Mic, Mc"),
     _b("Nahum", "나훔 나 나훔서", "Nah, Na"),
-    _b("Habakkuk", "하박국 합 하박국서 하바쿡서 하바", "Hab, Hb"),
-    _b("Zephaniah", "스바냐 습 스바냐서 스바니야서 스바", "Zeph, Zep, Zp"),
-    _b("Haggai", "학개 학 학개서 하까이서 하까", "Hag, Hg"),
-    _b("Zechariah", "스가랴 슥 스가랴서 즈카르야서 즈카", "Zech, Zec, Zc"),
-    _b("Malachi", "말라기 말 말라기서 말라키서 말라", "Mal, Ml"),
-    _b("Matthew", "마태복음 마 마태복음서 마태오복음서 마태", "Matt, Mat, Mt"),
-    _b("Mark", "마가복음 막 마가복음서 마르코복음서 마르", "Mrk, Mar, Mk, Mr"),
-    _b("Luke", "누가복음 눅 누가복음서 루카복음서 루카", "Luk, Lk"),
+    _b("Habakkuk", "하박국 합 하박국서", "Hab, Hb"),
+    _b("Zephaniah", "스바냐 습 스바냐서", "Zeph, Zep, Zp"),
+    _b("Haggai", "학개 학 학개서", "Hag, Hg"),
+    _b("Zechariah", "스가랴 슥 스가랴서", "Zech, Zec, Zc"),
+    _b("Malachi", "말라기 말 말라기서", "Mal, Ml"),
+    _b("Matthew", "마태복음 마 마태복음서", "Matt, Mat, Mt"),
+    _b("Mark", "마가복음 막 마가복음서", "Mrk, Mar, Mk, Mr"),
+    _b("Luke", "누가복음 눅 누가복음서", "Luk, Lk"),
     _b("John", "요한복음 요 요한복음서 요한", "Jhn, Joh, Jn"),
-    _b("Acts", "사도행전 행 사도", "Act, Ac"),
-    _b("Romans", "로마서 롬 로마", "Rom, Ro, Rm"),
-    _b("1 Corinthians", "고린도전서 고전 코린토1서 1코린", "1 Cor, 1 Co"),
-    _b("2 Corinthians", "고린도후서 고후 코린토2서 2코린", "2 Cor, 2 Co"),
-    _b("Galatians", "갈라디아서 갈 갈라티아서 갈라", "Gal, Ga"),
-    _b("Ephesians", "에베소서 엡 에페소서 에페", "Eph, Ephes"),
-    _b("Philippians", "빌립보서 빌 필리피서 필리", "Phil, Php"),
-    _b("Colossians", "골로새서 골 콜로새서 콜로", "Col"),
-    _b("1 Thessalonians", "데살로니가전서 살전 테살로니카1서 1테살", "1 Thess, 1 Thes, 1 Th"),
-    _b("2 Thessalonians", "데살로니가후서 살후 테살로니카2서 2테살", "2 Thess, 2 Thes, 2 Th"),
-    _b("1 Timothy", "디모데전서 딤전 티모테오1서 1티모", "1 Tim, 1 Ti"),
-    _b("2 Timothy", "디모데후서 딤후 티모테오2서 2티모", "2 Tim, 2 Ti"),
-    _b("Titus", "디도서 딛 티토서 티토", "Tit"),
-    _b("Philemon", "빌레몬서 몬 필레몬서 필레", "Philem, Phm"),
-    _b("Hebrews", "히브리서 히 히브", "Heb"),
-    _b("James", "야고보서 약 야고", "Jas, Jm"),
-    _b("1 Peter", "베드로전서 벧전 베드로1서 1베드", "1 Pet, 1 Pe, 1 Pt"),
-    _b("2 Peter", "베드로후서 벧후 베드로2서 2베드", "2 Pet, 2 Pe, 2 Pt"),
-    _b("1 John", "요한일서 요일 요한1서 1요한", "1 Jn, 1 Jhn, 1 Joh, 1 Jo"),
-    _b("2 John", "요한이서 요이 요한2서 2요한", "2 Jn, 2 Jhn, 2 Joh, 2 Jo"),
-    _b("3 John", "요한삼서 요삼 요한3서 3요한", "3 Jn, 3 Jhn, 3 Joh, 3 Jo"),
-    _b("Jude", "유다서 유 유다", "Jd"),
-    _b("Revelation", "요한계시록 계 계시록 요한묵시록 묵시", "Rev, Re, Rv, Revelations"),
+    _b("Acts", "사도행전 행", "Act, Ac"),
+    _b("Romans", "로마서 롬", "Rom, Ro, Rm"),
+    _b("1 Corinthians", "고린도전서 고전", "1 Cor, 1 Co"),
+    _b("2 Corinthians", "고린도후서 고후", "2 Cor, 2 Co"),
+    _b("Galatians", "갈라디아서 갈", "Gal, Ga"),
+    _b("Ephesians", "에베소서 엡", "Eph, Ephes"),
+    _b("Philippians", "빌립보서 빌", "Phil, Php"),
+    _b("Colossians", "골로새서 골", "Col"),
+    _b("1 Thessalonians", "데살로니가전서 살전", "1 Thess, 1 Thes, 1 Th"),
+    _b("2 Thessalonians", "데살로니가후서 살후", "2 Thess, 2 Thes, 2 Th"),
+    _b("1 Timothy", "디모데전서 딤전", "1 Tim, 1 Ti"),
+    _b("2 Timothy", "디모데후서 딤후", "2 Tim, 2 Ti"),
+    _b("Titus", "디도서 딛", "Tit"),
+    _b("Philemon", "빌레몬서 몬", "Philem, Phm"),
+    _b("Hebrews", "히브리서 히", "Heb"),
+    _b("James", "야고보서 약", "Jas, Jm"),
+    _b("1 Peter", "베드로전서 벧전", "1 Pet, 1 Pe, 1 Pt"),
+    _b("2 Peter", "베드로후서 벧후", "2 Pet, 2 Pe, 2 Pt"),
+    _b("1 John", "요한일서 요일 요한1서", "1 Jn, 1 Jhn, 1 Joh, 1 Jo"),
+    _b("2 John", "요한이서 요이 요한2서", "2 Jn, 2 Jhn, 2 Joh, 2 Jo"),
+    _b("3 John", "요한삼서 요삼 요한3서", "3 Jn, 3 Jhn, 3 Joh, 3 Jo"),
+    _b("Jude", "유다서 유", "Jd"),
+    _b("Revelation", "요한계시록 계 계시록", "Rev, Re, Rv, Revelations"),
 )
 
 BOOK_NAMES = tuple(b.name for b in BOOKS)
@@ -160,12 +162,17 @@ def _build_index() -> tuple[dict[str, str], list[tuple[str, str]]]:
 _EXACT, _FULL = _build_index()
 
 
-def _korean_particle(word: str, with_final: str, without_final: str) -> str:
-    """'요한복음' + 은/는 -> '요한복음은'; works for any Hangul word."""
-    last = word[-1:]
+def _particle(word: str, with_final: str, without_final: str) -> str:
+    """The particle that fits after ``word``: ('요한복음', 은, 는) -> 은; unknown ending -> 은(는)."""
+    last = word.rstrip()[-1:]
     if "가" <= last <= "힣":
-        return word + (with_final if (ord(last) - 0xAC00) % 28 else without_final)
-    return f"{word}{with_final}({without_final})"
+        return with_final if (ord(last) - 0xAC00) % 28 else without_final
+    return f"{with_final}({without_final})"
+
+
+def _korean_particle(word: str, with_final: str, without_final: str) -> str:
+    """'요한복음' + 은/는 -> '요한복음은'."""
+    return word + _particle(word, with_final, without_final)
 
 
 def resolve_book(text: str) -> str:
@@ -187,7 +194,7 @@ def resolve_book(text: str) -> str:
     if found:
         names = ", ".join(BOOKS_BY_NAME[b].korean_name for b in found[:6])
         raise ReferenceProblem(f"'{shown}'에 맞는 책이 여러 권입니다({names}). 조금 더 적어 주세요.")
-    raise ReferenceProblem(f"'{shown}'은(는) 알 수 없는 책 이름입니다. 예) 요, 요한복음, John")
+    raise ReferenceProblem(f"'{shown}'{_particle(shown, '은', '는')} 알 수 없는 책 이름입니다. 예) 요, 요한복음, John")
 
 
 @dataclass(frozen=True)
@@ -196,6 +203,7 @@ class Reference:
     chapter: int
     first: int
     last: int
+    note: str = ""  # e.g. "한글 성경 고후 13:13" when Korean numbering was translated to BSB's
 
     @property
     def verse_count(self) -> int:
@@ -212,7 +220,23 @@ class Reference:
         return f"{self.display} ({TRANSLATION_TAG})"
 
 
-_DASH = r"(?:-|~|–|—|‒|―|〜)"
+# Korean Protestant Bibles (개역개정, 새번역) number two places differently from the BSB (and
+# other English Bibles); everywhere else the numbers agree.  Korean verse -> BSB verses:
+#   2 Corinthians 13: 12 = BSB 12-13 ("Greet one another..." + "All the saints..."),
+#                     13 = BSB 14 (the benediction, 축도 "고후 13:13")
+#   3 John 1:         15 = the end of BSB 14 ("Peace to you...")
+KOREAN_NUMBERING = {
+    ("2 Corinthians", 13): {12: (12, 13), 13: (14, 14)},
+    ("3 John", 1): {15: (14, 14)},
+}
+
+
+def korean_to_bsb(book: str, chapter: int, first: int, last: int) -> tuple[int, int]:
+    table = KOREAN_NUMBERING.get((book, chapter), {})
+    return table.get(first, (first, first))[0], table.get(last, (last, last))[1]
+
+
+_DASH = r"(?:-|~|–|—|‒|―|〜|∼|‐|−|⁓)"  # incl. the KS X 1001 물결표 ∼ from Korean documents
 _SEP = r"(?::|\.|장|편)"
 _TAIL_CHAPTER_VERSE = re.compile(
     rf"(?P<ch>\d{{1,3}})\s*{_SEP}\s*(?P<v1>\d{{1,3}})\s*절?"
@@ -220,19 +244,40 @@ _TAIL_CHAPTER_VERSE = re.compile(
 )
 _TAIL_VERSE_ONLY = re.compile(rf"(?P<v1>\d{{1,3}})\s*(?P<unit>장|편|절)?(?:\s*{_DASH}\s*(?P<v2>\d{{1,3}})\s*절?)?\s*$")
 _TRAILING_NOTE = re.compile(r"\s*[(\[][^()\[\]]*[)\]]\s*$")  # "John 3:16 (BSB)"
+_OPENERS = "([{<「『《〈【“‘\"'"
+_CLOSERS = ")]}>」』》〉】”’\"'"
+_HANGUL = re.compile(r"[가-힣]")
+_ANOTHER_REFERENCE = re.compile(r"\d\s*[:.장편]\s*\d")
 EXAMPLE = "예) 요 3:16, 시 23:1-3, John 3:16"
+SEVERAL = "여러 구절은 쉼표(,)로 나눠 주세요. 예) 요 3:16, 롬 8:28"
+
+
+def _unwrap(s: str) -> str:
+    """'(롬 8:28)', '「롬 8:28」' -> '롬 8:28'; 'John 3:16 (BSB)' -> 'John 3:16'."""
+    s = s.strip()
+    while len(s) >= 2 and s[0] in _OPENERS and s[-1] in _CLOSERS:
+        s = s[1:-1].strip()
+    stripped = _TRAILING_NOTE.sub("", s).strip()
+    return stripped or s
+
+
+def _book_part(text: str) -> str:
+    book_text = text.strip(" ,")
+    if _ANOTHER_REFERENCE.search(book_text):  # "요 3:16 롬 8:28": two references without a comma
+        raise ReferenceProblem(SEVERAL)
+    return book_text
 
 
 def parse_reference(text: str) -> Reference:
-    """Read one reference such as '요 3:16', '시편 23편 1-3절', '1 Cor 13:13', 'Jude 24'."""
-    s = unicodedata.normalize("NFKC", text or "").strip()
-    s = _TRAILING_NOTE.sub("", s).strip()
+    """Read one reference such as '요 3:16', '시편 23편 1-3절', '1 Cor 13:13', 'Jude 24'.
+    Korean book names use Korean verse numbers (see KOREAN_NUMBERING)."""
+    s = _unwrap(unicodedata.normalize("NFKC", text or ""))
     if not s:
         raise ReferenceProblem(f"구절 주소를 적어 주세요. {EXAMPLE}")
     m = _TAIL_CHAPTER_VERSE.search(s)
     if m:
-        book_text = s[: m.start()]
-        book = resolve_book(book_text.strip(" ,"))
+        book_text = _book_part(s[: m.start()])
+        book = resolve_book(book_text)
         chapter, first = int(m.group("ch")), int(m.group("v1"))
         last = int(m.group("v2")) if m.group("v2") else first
         if m.group("ch2") and int(m.group("ch2")) != chapter:
@@ -241,11 +286,19 @@ def parse_reference(text: str) -> Reference:
         m = _TAIL_VERSE_ONLY.search(s)
         if not m or not s[: m.start()].strip(" ,"):
             raise ReferenceProblem(f"장과 절을 찾지 못했습니다. {EXAMPLE}")
-        book = resolve_book(s[: m.start()].strip(" ,"))
-        number = int(m.group("v1"))
-        if book not in SINGLE_CHAPTER_BOOKS or m.group("unit") in ("장", "편"):
-            ko = BOOKS_BY_NAME[book].korean[1]
-            raise ReferenceProblem(f"장과 절을 함께 적어 주세요. 예) {ko} {number}:1")
+        book_text = _book_part(s[: m.start()])
+        if book_text[-1:].isdigit():  # "요 3 16": a space instead of ':'
+            raise ReferenceProblem("장과 절 사이에 ':'를 넣어 주세요. 예) 요 3:16")
+        book = resolve_book(book_text)
+        number, unit = int(m.group("v1")), m.group("unit")
+        ko = BOOKS_BY_NAME[book].korean[1]
+        if book in SINGLE_CHAPTER_BOOKS and unit in ("장", "편"):
+            whole = _korean_particle(BOOKS_BY_NAME[book].korean_name, "은", "는")
+            raise ReferenceProblem(f"{whole} 1장뿐입니다. 절 번호만 적어 주세요. 예) {ko} 1:{max(number, 1)}")
+        if book not in SINGLE_CHAPTER_BOOKS:
+            if unit == "절":
+                raise ReferenceProblem(f"장도 함께 적어 주세요. {EXAMPLE}")
+            raise ReferenceProblem(f"절도 함께 적어 주세요. 예) {ko} {max(number, 1)}:1")
         chapter, first = 1, number
         last = int(m.group("v2")) if m.group("v2") else first
     if chapter < 1 or first < 1:
@@ -254,12 +307,19 @@ def parse_reference(text: str) -> Reference:
         raise ReferenceProblem(f"범위가 거꾸로입니다: {first}-{last} → {last}-{first}")
     if last - first + 1 > MAX_PASSAGE_VERSES:
         raise ReferenceProblem(f"한 번에 {MAX_PASSAGE_VERSES}절까지 넣을 수 있습니다.")
-    return Reference(book, chapter, first, last)
+    note = ""
+    if _HANGUL.search(book_text):
+        bsb_first, bsb_last = korean_to_bsb(book, chapter, first, last)
+        if (bsb_first, bsb_last) != (first, last):
+            typed = str(first) if first == last else f"{first}-{last}"
+            note = f"한글 성경 {BOOKS_BY_NAME[book].korean[1]} {chapter}:{typed}"
+            first, last = bsb_first, bsb_last
+    return Reference(book, chapter, first, last, note)
 
 
 def split_references(text: str) -> list[str]:
-    """Several references typed or pasted at once: '요 3:16, 롬 8:28; 시 23:1'."""
-    return [p.strip() for p in re.split(r"[,;，；、\n\r]+", text or "") if p.strip()]
+    """Several references typed or pasted at once: '요 3:16, 롬 8:28; 시 23:1 / 창 1:1'."""
+    return [p.strip() for p in re.split(r"[,;，；、·・/\n\r]+", text or "") if p.strip()]
 
 
 class Bible:

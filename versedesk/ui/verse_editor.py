@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from PySide6.QtCore import QItemSelectionModel, Qt, Signal
-from PySide6.QtGui import QFont, QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QItemSelectionModel, Qt, QTimer, Signal
+from PySide6.QtGui import QCursor, QFont, QGuiApplication, QIcon, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -30,16 +30,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from versedesk.bible import Bible, BibleUnavailable, ReferenceProblem, split_references
+from versedesk.bible import Bible, BibleUnavailable, ReferenceProblem, parse_reference, split_references
 from versedesk.rotation import INTERVAL_CHOICES, interval_label
 from versedesk.verses import MAX_VERSES, Verse
 
 log = logging.getLogger("versedesk.ui.verse_editor")
 
 TITLE = "VerseDesk 말씀 목록"
-HELP = "구절 주소를 적고 Enter를 누르면 본문이 자동으로 들어갑니다. 여러 개는 쉼표로 구분하세요."
+PLACEHOLDER = "예) 요 3:16, 시 23:1-3, John 3:16"
+HELP = "구절 주소를 적고 Enter를 누르면 영어 본문이 자동으로 들어갑니다. 여러 개는 쉼표(,)로 나눠 적으세요."
 PREVIEW_HINT = "목록에서 구절을 고르면 여기에 전체 본문이 보입니다."
-OK_COLOR, ERROR_COLOR, HINT_COLOR = "#1E7B34", "#B3261E", "#5F6368"
+DEFAULT_SIZE = (640, 560)
+# text colours for a light window, and for Windows' dark app mode (readable on both)
+LIGHT_COLORS = {"ok": "#1E7B34", "error": "#B3261E", "hint": "#5F6368"}
+DARK_COLORS = {"ok": "#81C995", "error": "#F28B82", "hint": "#BDC1C6"}
 
 
 class _VerseTree(QTreeWidget):
@@ -48,8 +52,34 @@ class _VerseTree(QTreeWidget):
     reordered = Signal()
 
     def dropEvent(self, event) -> None:  # noqa: N802 (Qt name)
+        moving = sorted(self.selectedItems(), key=self.indexOfTopLevelItem)
         super().dropEvent(event)
+        if not event.isAccepted() or not moving:
+            return
+        self.keep_order(moving)
+        QTimer.singleShot(0, lambda: self._reselect(moving))  # Qt clears the selection after a drop
         self.reordered.emit()
+
+    def keep_order(self, moving: list[QTreeWidgetItem]) -> None:
+        """Qt drops a block of rows in the order they were clicked (and sometimes reversed);
+        put them back in their list order, where they landed."""
+        rows = [self.indexOfTopLevelItem(i) for i in moving]
+        if not rows or min(rows) < 0:
+            return
+        start = min(rows)
+        for item in moving:
+            self.takeTopLevelItem(self.indexOfTopLevelItem(item))
+        for k, item in enumerate(moving):
+            self.insertTopLevelItem(start + k, item)
+
+    def _reselect(self, items: list[QTreeWidgetItem]) -> None:
+        try:
+            self.clearSelection()
+            for item in items:
+                if self.indexOfTopLevelItem(item) >= 0:
+                    item.setSelected(True)
+        except RuntimeError:  # the window was closed in the meantime
+            pass
 
 
 class VerseEditor(QWidget):
@@ -63,6 +93,7 @@ class VerseEditor(QWidget):
         interval_minutes: int,
         *,
         using_builtin: bool = False,
+        note: str | None = None,
         load_bible: Callable[[], Bible] | None = None,
         icon: QIcon | None = None,
     ):
@@ -75,7 +106,7 @@ class VerseEditor(QWidget):
         self._bible: Bible | None = None
 
         self.input = QLineEdit()
-        self.input.setPlaceholderText("예) 요 3:16 · 시 23:1-3 · John 3:16")
+        self.input.setPlaceholderText(PLACEHOLDER)
         self.input.setClearButtonEnabled(True)
         self.add_button = QPushButton("추가")
         self.message = QLabel()
@@ -99,6 +130,11 @@ class VerseEditor(QWidget):
         self.up_button = QPushButton("▲ 위로")
         self.down_button = QPushButton("▼ 아래로")
         self.delete_button = QPushButton("삭제")
+        for b in (self.up_button, self.down_button, self.delete_button):
+            # a click must leave the keyboard in the list: a focused button that gets disabled
+            # (top/bottom reached) would hand the focus to the interval dropdown, where the
+            # arrow keys would silently change the interval
+            b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.preview = QLabel()
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -140,7 +176,7 @@ class VerseEditor(QWidget):
         root.addLayout(middle, 1)
         root.addWidget(self.preview)
         root.addLayout(bottom)
-        self.resize(640, 560)
+        self._fit_to_screen()
 
         self.input.returnPressed.connect(self.add_from_input)
         self.add_button.clicked.connect(self.add_from_input)
@@ -161,14 +197,25 @@ class VerseEditor(QWidget):
             sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             sc.activated.connect(slot)
 
-        self.set_list(verses, using_builtin)
+        self.set_list(verses, using_builtin, note)
+
+    def _fit_to_screen(self) -> None:
+        """Open on the screen with the mouse (where the tray menu was), small enough to fit
+        above the taskbar at 125-175% scaling on a small screen."""
+        width, height = DEFAULT_SIZE
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        if screen is not None:
+            self.setScreen(screen)
+            area = screen.availableGeometry()
+            width, height = min(width, area.width() - 40), min(height, area.height() - 100)
+        self.resize(max(width, 360), max(height, 300))
 
     # ------------------------------------------------------------------ list
 
     def verses(self) -> list[Verse]:
         return [self.tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) for i in range(self.tree.topLevelItemCount())]
 
-    def set_list(self, verses: list[Verse], using_builtin: bool = False) -> None:
+    def set_list(self, verses: list[Verse], using_builtin: bool = False, note: str | None = None) -> None:
         """Show ``verses`` (e.g. after the file was edited outside); keeps the selection."""
         selected = {v.key() for v in self._selected_verses()}
         self.tree.clear()
@@ -182,10 +229,12 @@ class VerseEditor(QWidget):
             item.setSelected(item.data(0, Qt.ItemDataRole.UserRole).key() in selected)
         self._update_count()
         self._update_selection()
-        if using_builtin:
-            self._say(f"기본 말씀 {len(verses)}개입니다. 고치면 내 목록으로 저장됩니다.", HINT_COLOR)
+        if note:
+            self._say(note, "error")
+        elif using_builtin:
+            self._say(f"기본 말씀 {len(verses)}개입니다. 고치면 내 목록으로 저장됩니다. " + HELP, "hint")
         else:
-            self._say(HELP, HINT_COLOR)
+            self._say(HELP, "hint")
 
     @staticmethod
     def _item(v: Verse) -> QTreeWidgetItem:
@@ -219,10 +268,14 @@ class VerseEditor(QWidget):
         self._update_selection()
         self.list_changed.emit(self.verses())
 
+    def _color(self, kind: str) -> str:
+        dark = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+        return (DARK_COLORS if dark else LIGHT_COLORS)[kind]
+
     def _update_count(self) -> None:
         n = self.tree.topLevelItemCount()
         self.count_label.setText(f"{n}개 · 자동 저장" if n else "비어 있음 · 바탕화면에는 기본 말씀이 나옵니다")
-        self.count_label.setStyleSheet(f"color: {HINT_COLOR}")
+        self.count_label.setStyleSheet(f"color: {self._color('hint')}")
 
     def _update_selection(self) -> None:
         verses = self._selected_verses()
@@ -236,14 +289,14 @@ class VerseEditor(QWidget):
             self.preview.setStyleSheet("")
         elif verses:
             self.preview.setText(f"{len(verses)}개를 골랐습니다.")
-            self.preview.setStyleSheet(f"color: {HINT_COLOR}")
+            self.preview.setStyleSheet(f"color: {self._color('hint')}")
         else:
             self.preview.setText(PREVIEW_HINT)
-            self.preview.setStyleSheet(f"color: {HINT_COLOR}")
+            self.preview.setStyleSheet(f"color: {self._color('hint')}")
 
-    def _say(self, text: str, color: str) -> None:
+    def _say(self, text: str, kind: str) -> None:
         self.message.setText(text)
-        self.message.setStyleSheet(f"color: {color}")
+        self.message.setStyleSheet(f"color: {self._color(kind)}")
 
     # ------------------------------------------------------------------ actions
 
@@ -253,14 +306,14 @@ class VerseEditor(QWidget):
                 self._bible = (self._load_bible or Bible.load)()
             except (BibleUnavailable, OSError, ValueError) as e:
                 log.error("cannot load the built-in Bible: %s", e)
-                self._say("내장 성경 본문을 읽지 못했습니다. log.txt를 확인해 주세요.", ERROR_COLOR)
+                self._say("내장 성경 본문을 읽지 못했습니다. log.txt를 확인해 주세요.", "error")
                 return None
         return self._bible
 
     def add_from_input(self) -> None:
         refs = split_references(self.input.text())
         if not refs:
-            self._say("구절 주소를 적어 주세요. 예) 요 3:16", ERROR_COLOR)
+            self._say("구절 주소를 적어 주세요. " + PLACEHOLDER, "error")
             self.input.setFocus()
             return
         bible = self._bible_or_none()
@@ -268,26 +321,30 @@ class VerseEditor(QWidget):
             return
         keys = {v.key(): i for i, v in enumerate(self.verses())}
         added: list[Verse] = []
+        notes: list[str] = []
         failed: list[str] = []
         problems: list[str] = []
         duplicate_rows: list[int] = []
-        for ref in refs:
+        for typed in refs:
             try:
-                verse = bible.lookup(ref)
+                ref = parse_reference(typed)
+                verse = bible.passage(ref)
             except ReferenceProblem as e:
-                failed.append(ref)
-                problems.append(f"'{ref}': {e}")
+                failed.append(typed)
+                problems.append(f"'{typed}': {e}")
                 continue
             if verse.key() in keys:
                 duplicate_rows.append(keys[verse.key()])
                 problems.append(f"이미 목록에 있습니다: {verse.reference}")
                 continue
             if len(keys) >= MAX_VERSES:
-                failed.append(ref)
+                failed.append(typed)
                 problems.append(f"목록에는 {MAX_VERSES}개까지 넣을 수 있습니다.")
                 continue
             keys[verse.key()] = len(keys)
             added.append(verse)
+            if ref.note:  # Korean numbering differs from the BSB here (e.g. 고후 13:13 = 13:14)
+                notes.append(f"{verse.reference} = {ref.note}")
             self.tree.addTopLevelItem(self._item(verse))
         self.input.setText(", ".join(failed))
         self.input.setFocus()
@@ -297,25 +354,38 @@ class VerseEditor(QWidget):
             self._changed()
         elif duplicate_rows:
             self._select_rows(sorted(set(duplicate_rows)))
+        extra = f" ({'; '.join(notes)})" if notes else ""
         if added and not problems:
             what = added[0].reference if len(added) == 1 else f"{len(added)}개"
-            self._say(f"추가했습니다: {what}", OK_COLOR)
+            self._say(f"추가했습니다: {what}{extra}", "ok")
         elif added:
-            self._say(f"{len(added)}개를 추가했습니다. " + " / ".join(problems), ERROR_COLOR)
+            self._say(f"{len(added)}개를 추가했습니다{extra}. " + " / ".join(problems), "error")
         else:
-            self._say(" / ".join(problems), ERROR_COLOR)
+            self._say(" / ".join(problems), "error")
+
+    def _rebuild(self, items: list[QTreeWidgetItem]) -> None:
+        """Replace the rows without a flurry of selection changes in between."""
+        was = self.tree.blockSignals(True)
+        try:
+            while self.tree.topLevelItemCount():
+                self.tree.takeTopLevelItem(0)
+            for item in items:
+                self.tree.addTopLevelItem(item)
+        finally:
+            self.tree.blockSignals(was)
 
     def delete_selected(self) -> None:
         rows = self._selected_rows()
         if not rows:
             return
-        for r in reversed(rows):
-            self.tree.takeTopLevelItem(r)
-        n = self.tree.topLevelItemCount()
-        if n:
-            self._select_rows([min(rows[0], n - 1)])
-        self._say(f"{len(rows)}개를 목록에서 뺐습니다.", HINT_COLOR)
+        gone = set(rows)
+        keep = [self.tree.topLevelItem(r) for r in range(self.tree.topLevelItemCount()) if r not in gone]
+        self._rebuild(keep)
+        if keep:
+            self._select_rows([min(rows[0], len(keep) - 1)])
+        self._say(f"{len(rows)}개를 목록에서 뺐습니다.", "hint")
         self._changed()
+        self.tree.setFocus()
 
     def move_selected(self, step: int) -> None:
         """Move the selected rows one place up (-1) or down (+1); a block moves together."""
@@ -326,16 +396,28 @@ class VerseEditor(QWidget):
         order = list(range(n))
         for r in (rows if step < 0 else reversed(rows)):
             order[r], order[r + step] = order[r + step], order[r]
-        items = [self.tree.takeTopLevelItem(0) for _ in range(n)]
-        for i in order:
-            self.tree.addTopLevelItem(items[i])
+        items = [self.tree.topLevelItem(i) for i in range(n)]
+        self._rebuild([items[i] for i in order])
         self._select_rows([r + step for r in rows])
         self._changed()
+        self.tree.setFocus()
 
     def _on_interval(self, _index: int) -> None:
         minutes = self.interval.currentData()
         if isinstance(minutes, int):
             self.interval_changed.emit(minutes)
+
+    def show_interval(self, minutes: int) -> None:
+        """Show ``minutes`` (settings.json was changed outside) without reporting it back."""
+        was = self.interval.blockSignals(True)
+        try:
+            index = self.interval.findData(minutes)
+            if index < 0:
+                self.interval.addItem(interval_label(minutes), minutes)
+                index = self.interval.count() - 1
+            self.interval.setCurrentIndex(index)
+        finally:
+            self.interval.blockSignals(was)
 
     # ------------------------------------------------------------------ window
 
@@ -344,7 +426,7 @@ class VerseEditor(QWidget):
             self._update_count()
         else:
             self.count_label.setText("저장하지 못했습니다 (log.txt 참고)")
-            self.count_label.setStyleSheet(f"color: {ERROR_COLOR}")
+            self.count_label.setStyleSheet(f"color: {self._color('error')}")
 
     def present(self) -> None:
         if self.isMinimized():

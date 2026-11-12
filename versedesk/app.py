@@ -6,6 +6,7 @@ import datetime as _dt
 import functools
 import logging
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -31,6 +32,7 @@ from versedesk.zone_manager import ZoneManager
 log = logging.getLogger("versedesk.app")
 
 POLL_FILES_MS = 2000
+PREVIOUS_LIST_NAME = "verses.previous.json"  # the list as it was before the last editor session
 SCREEN_DEBOUNCE_MS = 600
 STRAY_CLICK_LOG_INTERVAL_S = 10.0
 DEFAULT_MARGIN_X = 40
@@ -95,9 +97,11 @@ class VerseDeskApp(QObject):
         if not self.builtin:
             log.error("the built-in verse list is empty")
         self.user_list: list[Verse] | None = None
-        self._verses_sig: tuple[int, int] | None = None
+        self._verses_sig: tuple[int, int] | None = None  # verses.json as last looked at by the poll
+        self._verses_ok_sig: tuple[int, int] | None = None  # ...as loaded into user_list or written by us
         self._verses_error_sig: tuple[int, int] | None = None
-        self._dated_file_kept = False  # an old one-verse-per-date verses.json could not be moved aside
+        self._verses_unreadable = False
+        self._editor_saved = False  # the open editor has saved at least once
         self.current_verse: Verse | None = None
         self.current_index = 0
         self._editor = None
@@ -230,22 +234,48 @@ class VerseDeskApp(QObject):
         has no list (or emptied it)."""
         return self.user_list or self.builtin or [FALLBACK]
 
+    def _backup_path(self) -> Path:
+        """A new verses.backup-<time>.json next to verses.json (never an existing name)."""
+        stamp = f"{_dt.datetime.now():%Y%m%d-%H%M%S}"
+        path = self.user_verses_path.with_name(f"verses.backup-{stamp}.json")
+        n = 2
+        while path.exists():
+            path = self.user_verses_path.with_name(f"verses.backup-{stamp}-{n}.json")
+            n += 1
+        return path
+
     @safe
     def _load_user_verses(self, initial: bool = False) -> bool:
-        """(Re)load %APPDATA%\\VerseDesk\\verses.json. Returns True if the list changed."""
+        """(Re)load %APPDATA%\\VerseDesk\\verses.json. Returns True if the list changed.
+
+        A file that cannot be used (broken, old format, locked) is left alone: the current list
+        stays, and save_user_list copies that file aside before the editor writes a new one."""
         sig = _file_sig(self.user_verses_path)
         if not initial and sig == self._verses_sig:
             return False
         self._verses_sig = sig
         if sig is None:
-            self._dated_file_kept = False
+            self._verses_ok_sig = None
             if self.user_list is not None:
                 log.info("user verses.json removed; using the built-in list")
                 self.user_list = None
                 return True
             return False
         result = load_verse_file(self.user_verses_path, "user")
+        if result.unreadable:
+            self._verses_sig = None  # try again at the next poll
+            if not self._verses_unreadable:
+                self._verses_unreadable = True
+                log.warning("user verses: %s — will retry", result.error)
+                self.tray.notify(
+                    "verses.json",
+                    "verses.json을 지금 열 수 없습니다(다른 프로그램이 사용 중일 수 있음). 열 수 있게 되면 자동으로 다시 읽습니다.",
+                    warning=True,
+                )
+            return False
+        self._verses_unreadable = False
         if result.dated:
+            self._verses_ok_sig = None
             self._retire_dated_file()
             changed, self.user_list = self.user_list is not None, None
             return changed
@@ -253,14 +283,15 @@ class VerseDeskApp(QObject):
             log.error("user verses: %s", result.error)
             if sig != self._verses_error_sig:
                 self._verses_error_sig = sig
+                keeping = "기본 목록을" if self.user_list is None else "지금까지의 목록을"
                 self.tray.notify(
                     "verses.json 형식 오류",
-                    f"{result.error}\n고칠 때까지 이전 목록을 그대로 사용합니다.",
+                    f"{result.error}\n고칠 때까지 {keeping} 그대로 씁니다. "
+                    "(말씀 목록 편집에서 고치면 이 파일은 verses.backup-….json으로 따로 보관됩니다.)",
                     warning=True,
                 )
             return False
         self._verses_error_sig = None
-        self._dated_file_kept = False
         for w in result.warnings:
             log.warning("user verses: %s", w)
         if result.warnings and not initial:
@@ -268,21 +299,20 @@ class VerseDeskApp(QObject):
                              warning=True)
         log.info("user verse list: %d verses", len(result.verses))
         self.user_list = result.verses
+        self._verses_ok_sig = sig
         return True
 
     def _retire_dated_file(self) -> None:
         """An older VerseDesk kept one verse per calendar day in verses.json. That file is not
         a list: move it aside (never delete it) so the user's new list can take its place."""
-        backup = self.user_verses_path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json")
+        backup = self._backup_path()
         try:
             self.user_verses_path.rename(backup)
         except OSError as e:
-            if not self._dated_file_kept:
-                log.warning("old date-based verses.json could not be moved aside (%s); it is not used", e)
-            self._dated_file_kept = True
+            log.warning("old date-based verses.json could not be moved aside (%s); it is not used and "
+                        "will be copied aside before a new list is saved", e)
             return
         self._verses_sig = None
-        self._dated_file_kept = False
         log.info("old date-based verses.json moved to %s; it is no longer used", backup.name)
         self.tray.notify(
             "말씀 목록",
@@ -318,10 +348,16 @@ class VerseDeskApp(QObject):
         from versedesk.ui.verse_editor import VerseEditor
 
         using_builtin = self.user_list is None
+        note = None
+        if using_builtin and _file_sig(self.user_verses_path) is not None:  # broken, old or locked file
+            note = ("지금 verses.json을 쓸 수 없어 기본 말씀을 보여 줍니다. 여기서 고치면 원래 파일은 "
+                    "verses.backup-….json으로 따로 보관됩니다.")
+        self._editor_saved = False
         editor = VerseEditor(
             list(self.builtin if using_builtin else self.user_list),
             self.store.settings.verse.interval_minutes,
             using_builtin=using_builtin,
+            note=note,
             icon=app_icon(),
         )
         editor.list_changed.connect(self._on_editor_list)
@@ -343,24 +379,34 @@ class VerseDeskApp(QObject):
             self._editor.set_save_result(ok)
 
     def save_user_list(self, verses: list[Verse]) -> bool:
-        """Write the user's list to verses.json and show it right away."""
+        """Write the user's list to verses.json and show it right away.
+
+        Nothing the user had is lost: a verses.json the app did not load or write itself (broken,
+        old format, edited outside a moment ago) is first copied to verses.backup-<time>.json, and
+        the first save of each editor session keeps the list from before it as verses.previous.json."""
         path = self.user_verses_path
         verses = [Verse(v.reference, v.text, "user") for v in verses]
+        kept = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            if self._dated_file_kept and path.exists():  # keep the old file, never overwrite it
-                import shutil
-
-                shutil.copy2(path, path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json"))
-                self._dated_file_kept = False
+            current = _file_sig(path)
+            if current is not None and current != self._verses_ok_sig:
+                kept = self._backup_path()
+                shutil.copy2(path, kept)
+            elif current is not None and not self._editor_saved:
+                shutil.copy2(path, path.with_name(PREVIOUS_LIST_NAME))
             atomic_write_text(path, list_document(verses))
         except OSError:
             log.exception("could not save the verse list")
             self.tray.notify("말씀 목록", "목록을 저장하지 못했습니다. log.txt를 확인해 주세요.", warning=True)
             return False
-        self._verses_sig = _file_sig(path)
+        self._editor_saved = True
+        self._verses_sig = self._verses_ok_sig = _file_sig(path)
         self._verses_error_sig = None
         self.user_list = verses
+        if kept is not None:
+            log.info("verses.json was not a list loaded by the app; kept it as %s", kept.name)
+            self.tray.notify("말씀 목록", f"원래 verses.json은 {kept.name}(으)로 보관하고, 편집 창의 목록을 새로 저장했습니다.")
         log.info("verse list saved: %d verses", len(verses))
         self._show_current()
         return True
@@ -375,6 +421,8 @@ class VerseDeskApp(QObject):
 
     def _apply_interval(self) -> None:
         minutes = self.store.settings.verse.interval_minutes
+        if self._editor is not None:
+            self._editor.show_interval(minutes)
         if minutes != self.rotation.interval:
             log.info("the verse now changes %s", interval_label(minutes))
             self.rotation.set_interval(minutes)

@@ -166,3 +166,71 @@ def test_set_list_keeps_the_selection(editor):
     editor._select_rows([1])
     editor.set_list(list(reversed(_list())))
     assert [i.text(0) for i in editor.tree.selectedItems()] == ["Book 2:1 (BSB)"]
+
+
+def test_clicking_the_buttons_leaves_the_keyboard_in_the_list(editor, qapp):
+    """A focused button that gets disabled would pass the focus to the interval dropdown,
+    where ↑/↓ would silently change (and save) the interval."""
+    from PySide6.QtWidgets import QApplication
+
+    editor.activateWindow()
+    assert QTest.qWaitForWindowActive(editor)
+    editor.tree.setFocus()
+    editor._select_rows([1])
+    for button in (editor.down_button, editor.up_button, editor.up_button, editor.delete_button):
+        QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+        assert QApplication.focusWidget() is editor.tree, button.text()
+    QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Down)
+    assert editor.intervals == []  # the arrow key moved in the list, not the interval
+
+
+def test_a_dropped_block_keeps_its_list_order(editor):
+    """Qt puts dragged rows down in click order (or reversed): they are put back in list order."""
+    items = [editor.tree.topLevelItem(i) for i in range(3)]
+    moving = [items[1], items[2]]
+    # what Qt can leave behind when the block is dropped back onto its own place: reversed
+    for it in moving:
+        editor.tree.takeTopLevelItem(editor.tree.indexOfTopLevelItem(it))
+    editor.tree.insertTopLevelItem(1, items[2])
+    editor.tree.insertTopLevelItem(2, items[1])
+    editor.tree.keep_order(moving)
+    assert refs(editor) == ["Book 1:1 (BSB)", "Book 2:1 (BSB)", "Book 3:1 (BSB)"]
+
+
+def test_showing_an_interval_from_settings_does_not_send_it_back(editor):
+    editor.show_interval(30)
+    editor.show_interval(45)  # a value set by hand that is not in the list
+    assert editor.interval.currentData() == 45 and editor.intervals == []
+    editor.interval.setCurrentIndex(editor.interval.findData(120))
+    assert editor.intervals == [120]  # a real choice is still reported
+
+
+def test_korean_numbering_is_explained_when_it_differs(qapp):
+    bible = Bible({"2 Corinthians 13:12": "Greet one another.", "2 Corinthians 13:13": "All the saints.",
+                   "2 Corinthians 13:14": "The grace of the Lord Jesus Christ."})
+    ed = VerseEditor([], 120, load_bible=lambda: bible)
+    ed.input.setText("고후 13:13")
+    ed.add_from_input()
+    assert refs(ed) == ["2 Corinthians 13:14 (BSB)"]
+    assert "한글 성경 고후 13:13" in ed.message.text()
+    ed.close()
+
+
+def test_a_note_about_an_unusable_file_is_shown(qapp):
+    ed = VerseEditor(_list(), 120, using_builtin=True, note="지금 verses.json을 쓸 수 없어 기본 말씀을 보여 줍니다.",
+                     load_bible=_bible)
+    assert "쓸 수 없어" in ed.message.text()
+    ed.close()
+
+
+def test_the_comma_rule_is_shown_from_the_first_use(qapp):
+    ed = VerseEditor(_list(), 120, using_builtin=True, load_bible=_bible)
+    assert "쉼표" in ed.message.text() and "," in ed.input.placeholderText()
+    ed.close()
+
+
+def test_the_window_fits_a_small_screen(qapp):
+    ed = VerseEditor(_list(), 120, load_bible=_bible)
+    area = ed.screen().availableGeometry()
+    assert ed.width() <= max(360, area.width() - 40) and ed.height() <= max(300, area.height() - 100)
+    ed.close()

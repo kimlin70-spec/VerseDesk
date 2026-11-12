@@ -352,3 +352,134 @@ def test_a_save_that_fails_is_reported_and_nothing_crashes(qapp, home, embedded,
         assert app.user_list is None  # still the built-in list on screen
     finally:
         shutdown(app)
+
+
+def _builtin_count(app):
+    return len(app.builtin)
+
+
+def test_a_broken_list_is_kept_as_a_backup_before_the_editor_saves(qapp, home, embedded):
+    """The user's own verses.json with a stray comma must never be lost by an editor change."""
+    from versedesk import paths
+
+    home.mkdir(parents=True, exist_ok=True)
+    path = paths.user_verses_path()
+    broken = '{"verses": [{"reference": "Mine 1:1", "text": "My own verse."},]}'
+    path.write_text(broken, encoding="utf-8")
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        assert app.user_list is None and app.verse_widget.text.startswith("Verse number")
+        app.open_verse_editor()
+        assert "기본 말씀을 보여 줍니다" in app._editor.message.text()  # says why, and that the file is kept
+        app._editor._select_rows([0])
+        app._editor.delete_selected()
+        backups = list(home.glob("verses.backup-*.json"))
+        assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == broken
+        saved = json.loads(path.read_text(encoding="utf-8"))["verses"]
+        assert len(saved) == _builtin_count(app) - 1
+        app._editor.delete_selected()  # later saves overwrite our own file: no more backups
+        assert len(list(home.glob("verses.backup-*.json"))) == 1
+    finally:
+        shutdown(app)
+
+
+def test_an_edit_made_outside_moments_before_a_save_is_kept(qapp, home, embedded):
+    """Notepad saved verses.json and the 2 s poll has not seen it yet: back it up, don't lose it."""
+    from versedesk import paths
+
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        app.open_verse_editor()
+        app._editor._select_rows([0])
+        app._editor.delete_selected()  # our own file now
+        path = paths.user_verses_path()
+        outside = json.dumps({"verses": [{"reference": "X 1:1", "text": "Typed in Notepad."}]})
+        path.write_text(outside, encoding="utf-8")
+        _touch_later(path)
+        app._editor._select_rows([0])
+        app._editor.delete_selected()  # before any poll
+        backups = list(home.glob("verses.backup-*.json"))
+        assert len(backups) == 1 and backups[0].read_text(encoding="utf-8") == outside
+    finally:
+        shutdown(app)
+
+
+def test_each_editor_session_keeps_the_list_from_before_it(qapp, home, embedded):
+    from versedesk import paths
+
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        previous = home / "verses.previous.json"
+        app.open_verse_editor()
+        app._editor._select_rows([0])
+        app._editor.delete_selected()  # first save ever: there was no file before, nothing to keep
+        assert not previous.exists()
+        app._editor.close()
+        qapp.processEvents()
+        before = paths.user_verses_path().read_text(encoding="utf-8")
+        app.open_verse_editor()
+        app._editor.tree.selectAll()
+        app._editor.delete_selected()  # oops: everything gone...
+        app._editor._changed()  # (a second save in the same session must not replace the copy)
+        assert previous.read_text(encoding="utf-8") == before  # ...but the list from before is kept
+    finally:
+        shutdown(app)
+
+
+def test_a_locked_list_is_read_again_once_it_can_be_opened(qapp, home, embedded, monkeypatch):
+    import versedesk.verses as verses_module
+    from versedesk import paths
+
+    home.mkdir(parents=True, exist_ok=True)
+    path = paths.user_verses_path()
+    path.write_text(json.dumps({"verses": [{"reference": "Mine 1:1", "text": "My own verse."}]}), encoding="utf-8")
+    original = verses_module.read_text_lenient
+    state = {"locked": True}
+
+    def maybe_locked(p):
+        if state["locked"]:
+            raise PermissionError("being used by another process")
+        return original(p)
+
+    monkeypatch.setattr(verses_module, "read_text_lenient", maybe_locked)
+    monkeypatch.setattr(verses_module.time, "sleep", lambda s: None)
+    app, _ = make_app(qapp, home, embedded, at(10))
+    try:
+        assert app.user_list is None
+        state["locked"] = False
+        app._poll_files()  # the same file, now readable: no change in size or time needed
+        assert app.verse_widget.text == "My own verse."
+    finally:
+        shutdown(app)
+
+
+def test_old_date_files_get_their_own_backup_names(qapp, home, embedded):
+    home.mkdir(parents=True, exist_ok=True)
+    old = {"verses": [{"date": "01-01", "reference": "Old", "text": "Old."}]}
+    stamp_taken = home / "verses.backup-x.json"
+    stamp_taken.write_text("keep me", encoding="utf-8")
+    (home / "verses.json").write_text(json.dumps(old), encoding="utf-8")
+    app, _ = make_app(qapp, home, embedded, at(9))
+    try:
+        assert stamp_taken.read_text(encoding="utf-8") == "keep me"
+        assert len(list(home.glob("verses.backup-*.json"))) == 2
+    finally:
+        shutdown(app)
+
+
+def test_the_open_editor_follows_an_interval_changed_in_settings_json(qapp, home, embedded):
+    app, _ = make_app(qapp, home, embedded, at(16))
+    try:
+        app.open_verse_editor()
+        reported = []
+        app._editor.interval_changed.connect(reported.append)
+        path = home / "settings.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["verse"]["interval_minutes"] = 30
+        path.write_text(json.dumps(data), encoding="utf-8")
+        _touch_later(path)
+        app._poll_files()
+        assert app.rotation.interval == 30 and app._editor.interval.currentData() == 30
+        assert reported == []  # shown, not sent back as a new choice
+    finally:
+        shutdown(app)

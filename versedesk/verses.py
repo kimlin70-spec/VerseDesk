@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,7 @@ from versedesk.settings import describe_json_error, read_text_lenient
 
 log = logging.getLogger("versedesk.verses")
 
-MAX_TEXT_CHARS = 2000
+MAX_TEXT_CHARS = 3000  # the editor's longest possible passage (10 verses) is about 2,300 characters
 MAX_REFERENCE_CHARS = 120
 MAX_VERSES = 1000  # far more than anyone rotates through; protects against absurd files
 
@@ -65,6 +66,7 @@ class VerseFile:
     warnings: list[str] = field(default_factory=list)
     error: str | None = None  # the whole file is unusable
     dated: bool = False  # the old one-verse-per-calendar-day format
+    unreadable: bool = False  # could not be opened (e.g. another program had it locked): try again
 
 
 def _clean(value: Any, limit: int) -> str | None:
@@ -96,6 +98,8 @@ def parse_list(data: Any, source: str) -> VerseFile:
         if text is None:
             out.warnings.append(f"entry #{i}: missing \"text\", skipped")
             continue
+        if len(text) == MAX_TEXT_CHARS and len(" ".join(str(item.get("text")).split())) > MAX_TEXT_CHARS:
+            out.warnings.append(f"entry #{i}: text longer than {MAX_TEXT_CHARS} characters was cut")
         if len(out.verses) >= MAX_VERSES:
             out.warnings.append(f"only the first {MAX_VERSES} verses are used")
             break
@@ -104,10 +108,18 @@ def parse_list(data: Any, source: str) -> VerseFile:
 
 
 def load_verse_file(path: Path, source: str) -> VerseFile:
-    try:
-        text = read_text_lenient(path)
-    except OSError as e:
-        return VerseFile(error=f"{path.name}: cannot read: {e}")
+    text: str | None = None
+    last_err: OSError | None = None
+    for attempt in range(3):  # antivirus, backup or sync tools may hold the file briefly
+        try:
+            text = read_text_lenient(path)
+            break
+        except OSError as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(0.15 * (attempt + 1))
+    if text is None:
+        return VerseFile(error=f"{path.name}: cannot open the file: {last_err}", unreadable=True)
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:

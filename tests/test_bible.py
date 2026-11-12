@@ -50,7 +50,6 @@ def bible():
         ("요일 4:8", "1 John 4:8 (BSB)"),
         ("요한1서 4:8", "1 John 4:8 (BSB)"),
         ("요한 일서 4:8", "1 John 4:8 (BSB)"),
-        ("1요한 4:8", "1 John 4:8 (BSB)"),
         ("유 24-25", "Jude 1:24–25 (BSB)"),
         ("Jude 24", "Jude 1:24 (BSB)"),
         ("3 John 2", "3 John 1:2 (BSB)"),
@@ -64,9 +63,22 @@ def bible():
         ("Philip 4:13", "Philippians 4:13 (BSB)"),
         ("Phile 1:6", "Philemon 1:6 (BSB)"),
         ("Gen. 1:1", "Genesis 1:1 (BSB)"),
-        ("탈출기 3:14", "Exodus 3:14 (BSB)"),  # 가톨릭 성경 names work too
-        ("루카 2:10", "Luke 2:10 (BSB)"),
         ("요한계 21:4", "Revelation 21:4 (BSB)"),  # a clear beginning of a name is enough
+        ("이사야서 40:31", "Isaiah 40:31 (BSB)"),  # 새번역 names
+        ("역대지하 7:14", "2 Chronicles 7:14 (BSB)"),
+        ("(롬 8:28)", "Romans 8:28 (BSB)"),  # as written in bulletins and sermon notes
+        ("「롬 8:28」", "Romans 8:28 (BSB)"),
+        ("시 23:1∼3", "Psalm 23:1–3 (BSB)"),  # KS X 1001 물결표 from Korean documents
+        ("시 23:1‐3", "Psalm 23:1–3 (BSB)"),
+        ("시 23:1−3", "Psalm 23:1–3 (BSB)"),
+        # Korean Bibles number these two places differently from the BSB (English numbering)
+        ("고후 13:13", "2 Corinthians 13:14 (BSB)"),  # the benediction (축도)
+        ("고린도후서 13장 13절", "2 Corinthians 13:14 (BSB)"),
+        ("고후 13:12", "2 Corinthians 13:12–13 (BSB)"),
+        ("고후 13:11-13", "2 Corinthians 13:11–14 (BSB)"),
+        ("2 Cor 13:13", "2 Corinthians 13:13 (BSB)"),  # English input keeps English numbers
+        ("요삼 1:15", "3 John 1:14 (BSB)"),
+        ("요한삼서 14-15", "3 John 1:14 (BSB)"),
         ("마 17:20-21", "Matthew 17:20–21 (BSB)"),  # 17:21 is empty in the BSB: skipped
     ],
 )
@@ -78,8 +90,16 @@ def test_references_people_type(bible, typed, label):
     "typed, says",
     [
         ("", "적어 주세요"),
-        ("요 3", "장과 절을 함께"),
-        ("시 23편", "장과 절을 함께"),
+        ("요 3", "절도 함께"),
+        ("시 23편", "절도 함께"),
+        ("요 16절", "장도 함께"),
+        ("몬 6장", "빌레몬서는 1장뿐입니다"),
+        ("요 3 16", "':'를 넣어"),
+        ("요한 3 5", "':'를 넣어"),  # not 3 John 1:5 by accident
+        ("요 3:16 롬 8:28", "쉼표"),
+        ("요 3:16 · 롬 8:28", "쉼표"),
+        ("탈출기 3:14", "알 수 없는 책"),  # 가톨릭 성경 numbering differs, so its names are not taken
+        ("루카 2:10", "'루카'는 알 수 없는"),
         ("3:16", "책 이름이 없습니다"),
         ("Hezekiah 1:1", "알 수 없는 책"),
         ("Jo 3:16", "여러 권"),
@@ -123,7 +143,26 @@ def test_psalm_titles_are_not_part_of_verse_1(bible):
 def test_several_references_at_once():
     assert split_references("요 3:16, 롬 8:28; 시 23:1\n창 1:1，요일 4:8") == [
         "요 3:16", "롬 8:28", "시 23:1", "창 1:1", "요일 4:8"]
+    assert split_references("요 3:16 · 롬 8:28 / 창 1:1") == ["요 3:16", "롬 8:28", "창 1:1"]
     assert split_references(" , ") == []
+
+
+def test_korean_numbering_is_noted():
+    ref = parse_reference("고후 13:13")
+    assert (ref.first, ref.last, ref.note) == (14, 14, "한글 성경 고후 13:13")
+    assert parse_reference("2 Cor 13:13").note == ""
+    assert parse_reference("고후 13:10").note == ""  # unaffected verses keep their numbers
+
+
+def test_the_longest_passage_survives_a_round_trip_through_the_file(bible):
+    """10 verses can be ~2,300 characters (e.g. 2 Kings 23:2-11): nothing may be cut on reload."""
+    from versedesk.verses import list_document, parse_list
+    import json
+
+    v = bible.lookup("왕하 23:2-11")
+    assert len(v.text) > 2000
+    back = parse_list(json.loads(list_document([v])), "user")
+    assert back.warnings == [] and back.verses[0].text == v.text
 
 
 def test_every_book_has_a_unique_korean_and_english_form():
