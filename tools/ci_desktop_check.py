@@ -544,16 +544,6 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
                    f"items={saved_zone(appdata).get('items')}")
             expect("zones: ...and the original file is left alone", dropped.exists())
 
-        # Double-click the folder item: Explorer opens it.
-        before_windows = set(top_level_windows())
-        double_click(*item_center(rect, 0))
-        opened = wait_for(lambda: [w2 for w2 in top_level_windows() if w2 not in before_windows
-                                   and api.class_name(w2) == "CabinetWClass" and api.IsWindowVisible(w2)], timeout=15)
-        expect("zones: double-clicking a folder opens it in Explorer", bool(opened),
-               f"{api.describe(opened[0])}" if opened else "no new Explorer window")
-        for w2 in opened or []:
-            user32.PostMessageW(w2, 0x0010, 0, 0)  # WM_CLOSE
-
         # Collapse and expand with the title bar button.
         click(r - 15, t + 15)
         collapsed = wait_for(lambda: saved_zone(appdata).get("collapsed") is True)
@@ -565,6 +555,17 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
         el, et, er, eb = api.window_rect(zone)
         expect("zones: pressing it again shows the items again (saved)", bool(expanded) and eb - et == b - t,
                f"height {eb - et} (was {b - t})")
+        # Double-click the folder item: Explorer opens it.
+        before_windows = set(top_level_windows())
+        double_click(*item_center(rect, 0))
+        opened = wait_for(lambda: [w2 for w2 in top_level_windows() if w2 not in before_windows
+                                   and api.class_name(w2) == "CabinetWClass" and api.IsWindowVisible(w2)], timeout=15)
+        expect("zones: double-clicking a folder opens it in Explorer", bool(opened),
+               f"{api.describe(opened[0])}" if opened else "no new Explorer window")
+        for w2 in opened or []:
+            user32.PostMessageW(w2, 0x0010, 0, 0)  # WM_CLOSE
+        wait_for(lambda: not any(api.IsWindow(w2) and api.IsWindowVisible(w2) for w2 in opened or []), timeout=10)
+
         expect("zones: originals in the zone were never touched",
                folder.is_dir() and (folder / "inside.txt").read_text(encoding="utf-8") == "keep"
                and doc.read_text(encoding="utf-8") == "original")
