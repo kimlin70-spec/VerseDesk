@@ -74,6 +74,14 @@
     Link로 받는지+원본 그대로, 우클릭 메뉴 '구역에서 빼기', 더블클릭으로 탐색기 열림, 접기/펼치기 저장.
   - Qt 6.11 함정: `QWindowsDrag::startDoDragDrop`은 첫 WM_MOUSEMOVE에 버튼 플래그가 없으면 끌기를 취소함(E_FAIL →
     IgnoreAction). 테스트에서 드래그를 만들 땐 커서 이동·누르기를 Qt가 먼저 처리하게 한 뒤 QDrag.exec.
+  - CI 러너 함정: explorer 재시작 뒤 이미지의 systempropertiesperformance.exe가 'System Properties'/'Performance Options'
+    창을 띄움 → `clear_area`가 구역·끌기 경로를 가리는 남의 창을 닫음/최소화.
+  - 4관점 검토(원본 안전·Qt/Windows UI·스레드·명세) 반영: 한글 PC 이름 공유 경로(ACE 'xn--' 복원), 500개 한도 안내,
+    배율 125~175% 가장자리 알파, \\?\ 접두어, 유니코드 공백, 새/클릭한 구역 앞으로(`layer.bring_to_front`),
+    제목줄 기준 모니터 유지, 48px 아이콘(SHIL_EXTRALARGE)+부드러운 확대, Explorer 표시 이름(SHGFI_DISPLAYNAME),
+    ShellExecuteEx에 SEE_MASK_FLAG_NO_UI(깨진 바로가기 '삭제하시겠습니까?' 방지, 연결 없는 형식은 'openas'),
+    작업 스레드 SetThreadErrorMode(디스크 없음 창 방지), 열기 직전 존재 재확인, 메뉴/대화상자 중 구역 삭제 지연.
+  - 남은 알려진 한계: 매핑 드라이브(Z:\)와 UNC(\\server\share) 같은 대상의 중복 판단, 8.3 짧은 이름.
   - 주의(조사 결과): 구역 상자는 모든 픽셀 알파 ≥ 2/255(드롭이 바탕화면으로 새지 않게), WS_EX_TRANSPARENT 금지,
     대화상자는 부모 없이 생성(Qt.Tool 위젯을 부모로 주면 owner가 되어 같이 끌려 올라옴), 파일 열기 전 AllowSetForegroundWindow,
     경로 존재 확인·아이콘 추출은 작업 스레드에서(네트워크 경로가 GUI를 멈추지 않게)
