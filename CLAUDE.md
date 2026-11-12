@@ -66,7 +66,7 @@
   재부팅 자동 실행은 나중에 확인 예정. **"말씀 위 바탕화면 아이콘 클릭 안 됨"** 보고 → CI(평소 상태+Win+D, 실제 마우스 클릭,
   그려진 글자 픽셀, 대조 실험)에서는 재현 안 됨. 앱이 말씀 창에 클릭이 닿으면 log.txt에 "reached the verse window although
   clicks should pass through" + 창 스타일·바탕화면 구조를 남기게 함 → 사용자 PC log.txt로 원인 확인 필요(재현 방법도 물어볼 것).
-- [구현 완료, CI·검토 진행 중 → 사용자 확인 대기] ② 폴더 구역 (같은 브랜치)
+- [완료, 사용자 확인 대기] ② 폴더 구역 (같은 브랜치) — CI 79개 점검(두 윈도우) 통과, 4관점 검토 16건+보완 4건 반영
   - 파일: `zones.py`(모델·경로 규칙·설정), `zone_manager.py`(설정↔창, 사용자 동작 저장), `zone_io.py`(작업 스레드:
     존재 확인·아이콘·열기), `shell.py`+`win32/shell.py`(SHGetFileInfo 아이콘→QImage, ShellExecuteEx 열기, 깨끗한 실행 환경),
     `ui/zone_widget.py`(상자), `ui/dialogs.py`(부모 없는 한국어 대화상자). settings.json의 `"zones"` 목록.
