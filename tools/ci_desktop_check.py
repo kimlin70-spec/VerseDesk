@@ -449,6 +449,33 @@ def ole_drag_file(path: Path, target: tuple[int, int]) -> object:
     return result
 
 
+def clear_area(target: int) -> list[str]:
+    """Runner desktops sometimes pop up stray windows (a 'System Properties' dialog was seen
+    over the zone): close or minimise foreign windows above ``target`` that overlap it."""
+    l, t, r, b = api.window_rect(target)
+    own = api.process_id(target)
+    order = top_level_windows()
+    if target not in order:
+        return []
+    cleared = []
+    for w in order[: order.index(target)]:
+        if not api.IsWindowVisible(w) or api.IsIconic(w) or api.is_cloaked(w) or api.process_id(w) == own:
+            continue
+        if api.class_name(w) in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW"):
+            continue
+        wl, wt, wr, wb = api.window_rect(w)
+        if wl < r and wr > l and wt < b and wb > t:
+            cleared.append(api.describe(w))
+            if api.class_name(w) == "#32770":
+                user32.PostMessageW(w, 0x0010, 0, 0)  # WM_CLOSE a stray dialog
+            else:
+                user32.ShowWindow(w, SW_MINIMIZE)
+    if cleared:
+        print("  cleared stray windows over the test area: " + "; ".join(cleared), flush=True)
+        time.sleep(1.0)
+    return cleared
+
+
 def popup_windows_of(pid: int) -> list[int]:
     return [w for w in top_level_windows()
             if api.IsWindowVisible(w) and api.process_id(w) == pid and "Popup" in api.class_name(w)]
@@ -499,6 +526,7 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
             "r.geometry('200x100+620+560'); r.after(240000, r.destroy); r.mainloop()")])
         find_window("VerseDesk CI keeper", 30)
         time.sleep(2)
+        clear_area(zone)
         rect = api.window_rect(zone)
         l, t, r, b = rect
         grid = [(px, py) for py in range(t + 1, b - 1, 6) for px in range(l + 1, r - 1, 6)]
@@ -545,6 +573,7 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
             expect("zones: ...and the original file is left alone", dropped.exists())
 
         # Collapse and expand with the title bar button.
+        clear_area(zone)
         click(r - 15, t + 15)
         collapsed = wait_for(lambda: saved_zone(appdata).get("collapsed") is True)
         cl, ct, cr, cb = api.window_rect(zone)
