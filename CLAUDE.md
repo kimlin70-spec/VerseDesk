@@ -62,8 +62,18 @@
   - 사용자가 README "1단계 확인 체크리스트"로 윈도우에서 확인 → 문제 있으면 log.txt 받아서 수정
   - CI가 실제 윈도우 바탕화면 두 종류에서 매 push 점검(아래 "검증된 사실"). 구절 366일은 편집 검토(38개 교체)와 계절 배치까지 끝남.
   - main 반영(PR/병합)은 사용자가 요청할 때만. 반영되면 Release `build-N`과 고정 링크 .../releases/latest/download/VerseDesk.exe 생김.
-- [대기] ② 폴더 구역 — 사용자가 ①을 윈도우에서 확인한 뒤 시작
-  - 준비된 것: `ui/desktop_widget.py`(바탕화면 위젯 공통 기반), `layer.attach/detach`, 설정의 알 수 없는 키 보존(`zones` 추가 예정)
+- ① 사용자 확인 결과(2026-11-12): Alt+Tab/작업표시줄 없음, Win+D, 배치 편집, 중복 실행 안내, 모니터 2대·다른 배율 모두 OK.
+  재부팅 자동 실행은 나중에 확인 예정. **"말씀 위 바탕화면 아이콘 클릭 안 됨"** 보고 → CI(평소 상태+Win+D, 실제 마우스 클릭,
+  그려진 글자 픽셀, 대조 실험)에서는 재현 안 됨. 앱이 말씀 창에 클릭이 닿으면 log.txt에 "reached the verse window although
+  clicks should pass through" + 창 스타일·바탕화면 구조를 남기게 함 → 사용자 PC log.txt로 원인 확인 필요(재현 방법도 물어볼 것).
+- [구현 완료, CI·검토 진행 중 → 사용자 확인 대기] ② 폴더 구역 (같은 브랜치)
+  - 파일: `zones.py`(모델·경로 규칙·설정), `zone_manager.py`(설정↔창, 사용자 동작 저장), `zone_io.py`(작업 스레드:
+    존재 확인·아이콘·열기), `shell.py`+`win32/shell.py`(SHGetFileInfo 아이콘→QImage, ShellExecuteEx 열기, 깨끗한 실행 환경),
+    `ui/zone_widget.py`(상자), `ui/dialogs.py`(부모 없는 한국어 대화상자). settings.json의 `"zones"` 목록.
+  - CI `check_zones`: 스타일, 상자 전체가 클릭을 받음, 다른 프로세스에서 실제 OLE 끌어다 놓기(Copy|Move|Link, Move 제안)를
+    Link로 받는지+원본 그대로, 우클릭 메뉴 '구역에서 빼기', 더블클릭으로 탐색기 열림, 접기/펼치기 저장.
+  - Qt 6.11 함정: `QWindowsDrag::startDoDragDrop`은 첫 WM_MOUSEMOVE에 버튼 플래그가 없으면 끌기를 취소함(E_FAIL →
+    IgnoreAction). 테스트에서 드래그를 만들 땐 커서 이동·누르기를 Qt가 먼저 처리하게 한 뒤 QDrag.exec.
   - 주의(조사 결과): 구역 상자는 모든 픽셀 알파 ≥ 2/255(드롭이 바탕화면으로 새지 않게), WS_EX_TRANSPARENT 금지,
     대화상자는 부모 없이 생성(Qt.Tool 위젯을 부모로 주면 owner가 되어 같이 끌려 올라옴), 파일 열기 전 AllowSetForegroundWindow,
     경로 존재 확인·아이콘 추출은 작업 스레드에서(네트워크 경로가 GUI를 멈추지 않게)
