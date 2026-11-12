@@ -50,7 +50,11 @@ def test_overlap():
         ("Trust in the LORD;", ["open_ending"]),
         ("“Come to Me, all you who are weary.”", []),
         ("Be strong; the LORD is with you.”", []),  # quote that began in an earlier verse
+        ("My covenant will not be broken,” says the LORD.", []),  # ...and closes mid-passage
+        ("“For as the heavens are higher than the earth.", ["unbalanced_double_quotes"]),
         ("He said, “Do not be afraid! I bring good news.", ["unbalanced_double_quotes"]),
+        ("You are my hiding place. Selah I will instruct you.", ["selah"]),
+        ("He makes my feet like those of a deer. For the choirmaster.", ["subscription"]),
     ],
 )
 def test_quality_flags(text, flags):

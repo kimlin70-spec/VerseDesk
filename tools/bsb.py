@@ -258,12 +258,19 @@ def quality_flags(text: str) -> list[str]:
     stripped = text.rstrip("”’\"') ")
     if not stripped or stripped[-1] not in ".!?":
         flags.append("open_ending")
+    if re.search(r"\bSelah\b", text):
+        flags.append("selah")  # a liturgical marker mid-text reads oddly on a desktop
+    if "For the choirmaster" in text:
+        flags.append("subscription")  # e.g. Habakkuk 3:19 ends with a musical note
     opens, closes = text.count("“"), text.count("”")
     if opens != closes:
-        # A quotation that began in an earlier verse and ends here ('... you go.' + closing
-        # quote) still reads as a complete sentence; a quote that opens and never closes
-        # does not.
-        if not (closes == opens + 1 and text.endswith("”")):
+        # A quotation that began in an earlier verse and closes inside this passage
+        # ("... will not be broken," says the LORD) still reads naturally: the first quote
+        # mark is a closing one and everything after it pairs up. A quote that opens and
+        # never closes does not read as a complete thought.
+        marks = [c for c in text if c in "“”"]
+        dangling_close = closes == opens + 1 and marks and marks[0] == "”"
+        if not dangling_close:
             flags.append("unbalanced_double_quotes")
     return flags
 

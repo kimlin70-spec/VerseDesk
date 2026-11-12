@@ -68,7 +68,10 @@ def main(argv: list[str] | None = None) -> int:
         qapp.setQuitOnLastWindowClosed(False)  # we only have tool windows and a tray icon
 
         from versedesk.app import VerseDeskApp
+        from versedesk.housekeeping import clean_in_background
         from versedesk.settings import SettingsStore
+
+        clean_in_background()
 
         store = SettingsStore(paths.settings_path())
         result = store.load()
