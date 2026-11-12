@@ -200,3 +200,17 @@ def test_edit_mode_reaches_every_zone(qapp, tmp_path):
     assert all(w._edit for w in m.widgets.values()) and len(m.widgets) == 2
     m.set_edit_mode(False)
     assert not any(w._edit for w in m.widgets.values())
+
+
+def test_a_full_zone_says_so_instead_of_claiming_duplicates(qapp, tmp_path, monkeypatch):
+    import versedesk.zones as zones_mod
+
+    monkeypatch.setattr(zones_mod, "MAX_ITEMS", 2)
+    m, store, notes = _manager(qapp, tmp_path)
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    m.add_items(zid, ["C:\\a", "C:\\b", "C:\\c"])
+    assert _saved(tmp_path)[0]["items"] == ["C:\\a", "C:\\b"]
+    assert "1개는 넣지 않았습니다" in notes[-1][1] and notes[-1][2] is True
+    m.add_items(zid, ["C:\\a"])
+    assert notes[-1][1] == "이미 이 구역에 들어 있는 항목입니다."

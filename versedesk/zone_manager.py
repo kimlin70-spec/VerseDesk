@@ -21,7 +21,7 @@ from versedesk.settings import LoadResult, Settings, SettingsStore
 from versedesk.ui import dialogs
 from versedesk.ui.zone_widget import TITLE_H, ItemView, ZoneWidget
 from versedesk.zone_io import ZoneIO
-from versedesk.zones import MAX_ZONES, Zone, display_name, find_zone, new_zone_id, path_key
+from versedesk.zones import MAX_ITEMS, MAX_ZONES, AddResult, Zone, display_name, find_zone, new_zone_id, path_key
 
 log = logging.getLogger("versedesk.zones")
 
@@ -199,18 +199,25 @@ class ZoneManager(QObject):
         self._notify(f"'{name}' 구역을 만들었습니다", NOTE_CREATED)
 
     def add_items(self, zid: str, paths: list[str]) -> None:
-        added: list[str] = []
+        results: list[AddResult] = []
 
         def mutate(s: Settings) -> None:
             z = find_zone(s.zones, zid)
             if z is not None:
-                added.extend(z.add_paths(paths))
+                results.append(z.add_paths(paths))
 
         self._update(mutate)
-        log.info("zone %s: %d dropped, %d added", zid, len(paths), len(added))
-        if added:
-            self.io.check(added, force_icon=True)
-        elif paths:
+        if not results:
+            return
+        r = results[-1]
+        log.info("zone %s: %d dropped, %d added, %d already there, %d over the limit, %d unusable",
+                 zid, len(paths), len(r.added), len(r.duplicates), len(r.over_limit), len(r.invalid))
+        if r.added:
+            self.io.check(r.added, force_icon=True)
+        if r.over_limit:
+            self._notify("구역", f"구역 하나에는 항목을 {MAX_ITEMS}개까지 넣을 수 있습니다. "
+                               f"{len(r.over_limit)}개는 넣지 않았습니다.", warning=True)
+        elif r.duplicates and not r.added:
             self._notify("구역", "이미 이 구역에 들어 있는 항목입니다.")
 
     def remove_item(self, zid: str, path: str) -> None:

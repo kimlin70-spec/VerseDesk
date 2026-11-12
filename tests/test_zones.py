@@ -24,15 +24,16 @@ def test_same_windows_path_in_different_spellings_is_one_item():
         "C:\\Users\\Kim\\Documents\\보고서\\",
         '"C:\\Users\\Kim\\Documents\\보고서"',
     ])
-    assert added == [r"C:\Users\Kim\Documents\보고서"]
+    assert added.added == [r"C:\Users\Kim\Documents\보고서"] and len(added.duplicates) == 4
     assert z.items == [r"C:\Users\Kim\Documents\보고서"]
 
 
 def test_different_paths_are_kept_in_order():
     z = Zone(id="a")
-    assert z.add_paths([r"D:\b.txt", r"C:\a", r"\\server\share\plan.xlsx"]) == [
+    assert z.add_paths([r"D:\b.txt", r"C:\a", r"\\server\share\plan.xlsx"]).added == [
         r"D:\b.txt", r"C:\a", r"\\server\share\plan.xlsx"]
-    assert z.add_paths([r"C:\A", r"C:\c"]) == [r"C:\c"]
+    r = z.add_paths([r"C:\A", r"C:\c", "relative"])
+    assert r.added == [r"C:\c"] and r.duplicates == [r"C:\A"] and r.invalid == ["relative"]
 
 
 def test_relative_or_broken_paths_are_rejected():
@@ -66,8 +67,8 @@ def test_zone_names_are_cleaned():
 
 def test_item_limit():
     z = Zone(id="a")
-    z.add_paths([f"C:\\f{i}" for i in range(MAX_ITEMS + 10)])
-    assert len(z.items) == MAX_ITEMS
+    r = z.add_paths([f"C:\\f{i}" for i in range(MAX_ITEMS + 10)])
+    assert len(z.items) == MAX_ITEMS and len(r.over_limit) == 10 and not r.duplicates
 
 
 def test_zones_round_trip_through_settings_json():
@@ -120,3 +121,20 @@ def test_unknown_zone_keys_are_preserved_for_newer_versions():
 def test_path_key_handles_unc_and_roots():
     assert path_key(r"\\Server\Share\Folder\\") == path_key(r"\\server\share\folder")
     assert path_key("C:\\") == path_key("c:/")
+
+
+def test_long_path_prefixes_name_the_same_items():
+    z = Zone(id="a")
+    assert z.add_paths([r"\\?\C:\Users\Kim\a.txt"]).added == [r"C:\Users\Kim\a.txt"]
+    assert z.add_paths([r"C:\Users\Kim\a.txt"]).duplicates == [r"C:\Users\Kim\a.txt"]
+    assert clean_path(r"\\?\UNC\server\share\x") == r"\\server\share\x"
+    assert path_key(r"\\?\UNC\Server\Share\X") == path_key(r"\\server\share\x")
+
+
+def test_unicode_spaces_belong_to_the_name():
+    """Only ASCII spaces and quotes are trimmed: a no-break or ideographic space is part of
+    a real Windows file name."""
+    assert clean_path("C:\\Report\u00a0") == "C:\\Report\u00a0"
+    assert clean_path("C:\\보고서\u3000") == "C:\\보고서\u3000"
+    assert path_key("C:\\Report\u00a0") != path_key("C:\\Report")
+    assert clean_path('  "C:\\Report"\n') == "C:\\Report"

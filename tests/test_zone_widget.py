@@ -150,3 +150,27 @@ def test_missing_items_are_drawn_faded_without_crashing(qapp):
     assert [i.exists for i in w.items] == [False, True]
     w.grab()  # paints both states
     w.deleteLater()
+
+
+def test_unc_paths_on_a_pc_with_a_korean_name_keep_the_real_name(qapp):
+    """Qt stores a non-ASCII host as "xn--..." (punycode); Windows would not find that."""
+    m = QMimeData()
+    m.setUrls([QUrl.fromLocalFile("//김철수-PC/공유/보고서.docx"), QUrl.fromLocalFile("//fileserver/Dept/a b.txt")])
+    assert local_paths_from_mime(m) == ["\\\\김철수-pc\\공유\\보고서.docx", "\\\\fileserver\\Dept\\a b.txt"]
+
+
+def test_every_pixel_catches_the_mouse_at_fractional_scaling(qapp):
+    """At 125/150/175% the last device row/column must not end up (partly) transparent."""
+    from PySide6.QtGui import QImage
+
+    for dpr in (1.25, 1.5, 1.75):
+        for size in ((162, 110), (161, 111), (340, 260)):
+            w = ZoneWidget("z")
+            w.set_zone("a", [], False, *size)
+            img = QImage(int(size[0] * dpr + 0.5), int(size[1] * dpr + 0.5), QImage.Format.Format_ARGB32_Premultiplied)
+            img.fill(0)
+            img.setDevicePixelRatio(dpr)
+            w.render(img)
+            low = min(img.pixelColor(x, y).alpha() for x in range(img.width()) for y in range(img.height()))
+            assert low >= 2, (dpr, size, low)
+            w.deleteLater()

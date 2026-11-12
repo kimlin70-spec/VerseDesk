@@ -44,19 +44,35 @@ MAX_SIZE = 4000
 ZONE_KEYS = ("id", "name", "x", "y", "width", "height", "collapsed", "items")
 
 
+def _strip(path: str) -> str:
+    """Remove surrounding ASCII spaces/line breaks and quotes only: other Unicode spaces
+    (no-break, ideographic) can be part of a real Windows file name."""
+    return path.strip(" \t\r\n").strip('"')
+
+
+def _drop_long_prefix(p: str) -> str:
+    """'\\\\?\\C:\\x' and '\\\\?\\UNC\\server\\share' name the same items as 'C:\\x' and '\\\\server\\share'."""
+    if p[:8].upper() == "\\\\?\\UNC\\":
+        return "\\\\" + p[8:]
+    if p.startswith("\\\\?\\") or p.startswith("//?/"):
+        return p[4:]
+    return p
+
+
 def _posix_path(p: str) -> bool:
     """Off Windows (development, tests) real paths look like '/home/...'; on Windows a
     leading slash is never an absolute path by itself."""
-    return os.name != "nt" and p.startswith("/") and not (len(p) > 2 and p[2] == ":")
+    return (os.name != "nt" and p.startswith("/") and not p.startswith("//")  # "//server/share" is a share
+            and not (len(p) > 2 and p[2] == ":"))
 
 
 def path_key(path: str) -> str:
     """Comparison key for a Windows path: case-insensitive, either slash, no trailing
     separator (except for a drive root like 'C:\\')."""
-    raw = path.strip().strip('"')
+    raw = _strip(path)
     if _posix_path(raw):
         return posixpath.normpath(raw)
-    p = ntpath.normpath(raw)
+    p = ntpath.normpath(_drop_long_prefix(raw))
     if len(p) > 3 and p.endswith("\\"):
         p = p.rstrip("\\")
     return ntpath.normcase(p)
@@ -66,12 +82,12 @@ def clean_path(path: str) -> str | None:
     """The path as it will be stored (normalised separators), or None if unusable."""
     if not isinstance(path, str):
         return None
-    p = path.strip().strip('"')
+    p = _strip(path)
     if not p or "\0" in p or len(p) > 32_000:
         return None
     if _posix_path(p):
         return posixpath.normpath(p)
-    p = ntpath.normpath(p)
+    p = ntpath.normpath(_drop_long_prefix(p))
     if len(p) > 3 and p.endswith("\\"):
         p = p.rstrip("\\")
     # only absolute paths make sense on a desktop ("C:\\..." or "\\\\server\\share\\...")
@@ -109,6 +125,17 @@ def new_zone_id(existing: Iterable[str] = ()) -> str:
 
 
 @dataclass
+class AddResult:
+    added: list[str] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)  # already in the zone
+    invalid: list[str] = field(default_factory=list)  # not a full path
+    over_limit: list[str] = field(default_factory=list)  # the zone already holds MAX_ITEMS
+
+    def __bool__(self) -> bool:
+        return bool(self.added)
+
+
+@dataclass
 class Zone:
     id: str
     name: str = DEFAULT_ZONE_NAME
@@ -130,21 +157,26 @@ class Zone:
     def contains(self, path: str) -> bool:
         return path_key(path) in self.keys()
 
-    def add_paths(self, paths: Iterable[str]) -> list[str]:
-        """Append new paths (skipping duplicates and unusable ones); returns what was added."""
+    def add_paths(self, paths: Iterable[str]) -> AddResult:
+        """Append new paths, skipping duplicates and unusable ones, up to MAX_ITEMS."""
         seen = self.keys()
-        added: list[str] = []
+        result = AddResult()
         for raw in paths:
             p = clean_path(raw)
             if p is None:
+                result.invalid.append(str(raw))
                 continue
             k = path_key(p)
-            if k in seen or len(self.items) >= MAX_ITEMS:
+            if k in seen:
+                result.duplicates.append(p)
+                continue
+            if len(self.items) >= MAX_ITEMS:
+                result.over_limit.append(p)
                 continue
             seen.add(k)
             self.items.append(p)
-            added.append(p)
-        return added
+            result.added.append(p)
+        return result
 
     def remove_path(self, path: str) -> bool:
         k = path_key(path)

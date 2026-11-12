@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QToolTip
 
@@ -77,7 +77,14 @@ def local_paths_from_mime(mime) -> list[str]:
     for url in mime.urls():
         if not url.isLocalFile():
             continue
-        local = url.toLocalFile()
+        if url.host():
+            # A share (\\server\\share\\...). Qt keeps a non-ASCII server name (e.g. a PC called
+            # 김철수-PC) in its ACE form "xn--..." which Windows would not find: decode it.
+            host = QUrl.fromAce(url.host(QUrl.ComponentFormattingOption.FullyEncoded).encode("ascii"),
+                                QUrl.AceProcessingOption.IgnoreIDNWhitelist)
+            local = "//" + host + url.path(QUrl.ComponentFormattingOption.FullyDecoded)
+        else:
+            local = url.toLocalFile()
         if len(local) >= 3 and local[0] == "/" and local[1].isalpha() and local[2] == ":":
             local = local[1:]  # "/C:/..." (how Qt spells a drive path off Windows) -> "C:/..."
         p = clean_path(local)
@@ -216,11 +223,13 @@ class ZoneWidget(DesktopWidget):
     def paintEvent(self, event):  # noqa: N802
         p = QPainter(self)
         try:
+            # Every device pixel catches the mouse and drops (alpha >= 2): no antialiasing and one
+            # logical pixel extra, so fractional scaling (125%, 150%...) leaves no thin edge.
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            p.fillRect(self.rect().adjusted(0, 0, 1, 1), FLOOR_COLOR)
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
             p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-            p.fillRect(self.rect(), FLOOR_COLOR)  # every pixel catches the mouse and drops
-            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
             box = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
             path = QPainterPath()
