@@ -197,7 +197,7 @@ versedesk/
   ui/desktop_widget.py 바탕화면 위젯 공통 기반(z-order 거부 훅), ui/verse_widget.py 말씀 위젯,
   ui/tray.py 트레이 메뉴, ui/icon.py 아이콘
   data/verses.json   내장 366일 구절(tools/build_verses.py 로 생성)
-tools/   bsb.py(원문 조회) build_verses.py verse_plan.tsv make_icon.py write_build_info.py ci_desktop_check.py
+tools/   bsb.py(원문 조회) verse_plan.tsv(날짜→구절) seasonal.py(계절 배치) build_verses.py make_icon.py write_build_info.py ci_desktop_check.py
 tests/   pytest (리눅스에서는 QT_QPA_PLATFORM=offscreen). tests/fake_win32.py는 윈도우 창 관리자 흉내(바탕화면 고정 로직 테스트용)
 ```
 
@@ -207,4 +207,6 @@ QT_QPA_PLATFORM=offscreen python -m pytest -q
 python -m PyInstaller --noconfirm --clean VerseDesk.spec   # Windows에서 dist/VerseDesk.exe
 ```
 
-GitHub Actions(`.github/workflows/build.yml`)가 push마다 Windows에서 테스트 → exe 빌드 → 실제 바탕화면 동작 점검(`tools/ci_desktop_check.py`, 스크린샷 포함)을 하고, main에 반영되면 Release를 만듭니다.
+구절을 바꿀 때: `tools/verse_plan.tsv` 수정 → `python3 -I tools/seasonal.py` → `python3 -I tools/build_verses.py` (본문은 항상 공식 bsb.txt에서 복사됩니다. 먼저 `python3 -I tools/bsb.py download`).
+
+GitHub Actions(`.github/workflows/build.yml`)가 push마다 Windows에서 테스트 → exe 빌드 → 실제 바탕화면 동작 점검(`tools/ci_desktop_check.py`, 스크린샷 포함)을 하고, 내장 구절이 공식 원문과 같은지 확인하며, main에 반영되면 Release를 만듭니다.

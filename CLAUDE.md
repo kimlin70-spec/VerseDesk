@@ -58,8 +58,10 @@
 ---
 
 ## 진행 상황 (Claude가 세션마다 갱신)
-- [완료, 사용자 확인 대기] ① 말씀 위젯 + 트레이 + 자동 실행 + 빌드 (브랜치 `claude/keen-hopper-d9tmyw`)
+- [완료, 사용자 확인 대기] ① 말씀 위젯 + 트레이 + 자동 실행 + 빌드 (브랜치 `claude/keen-hopper-d9tmyw`, main 미반영)
   - 사용자가 README "1단계 확인 체크리스트"로 윈도우에서 확인 → 문제 있으면 log.txt 받아서 수정
+  - CI가 실제 윈도우 바탕화면 두 종류에서 매 push 점검(아래 "검증된 사실"). 구절 366일은 편집 검토(38개 교체)와 계절 배치까지 끝남.
+  - main 반영(PR/병합)은 사용자가 요청할 때만. 반영되면 Release `build-N`과 고정 링크 .../releases/latest/download/VerseDesk.exe 생김.
 - [대기] ② 폴더 구역 — 사용자가 ①을 윈도우에서 확인한 뒤 시작
   - 준비된 것: `ui/desktop_widget.py`(바탕화면 위젯 공통 기반), `layer.attach/detach`, 설정의 알 수 없는 키 보존(`zones` 추가 예정)
   - 주의(조사 결과): 구역 상자는 모든 픽셀 알파 ≥ 2/255(드롭이 바탕화면으로 새지 않게), WS_EX_TRANSPARENT 금지,
@@ -94,20 +96,35 @@
 - `desktop_mode: "owner"`는 실험용 대체 수단(host를 owner/Qt transient parent로). owner 방식은 클릭 시 바탕화면 전체가 딸려
   올라오거나 Explorer와 입력 큐가 묶이는 문제가 보고되어 기본값이 아님. `Qt.WindowStaysOnBottomHint`는 Win+D 들어올림과
   싸우므로 쓰지 않음.
-- 실제 Windows 검증은 CI(`tools/ci_desktop_check.py`)가 GitHub windows 러너의 실제 데스크톱에서 함(Win+D, explorer 재시작, 클릭 통과, 중복 실행, 자동 실행). 결과는 Actions의 Job Summary와 `ci-report` 아티팩트(스크린샷, log.txt).
+- `_sync_entry`가 매 tick마다 `_apply_styles`로 창 스타일을 다시 맞춤 → 다른 프로그램이 WS_EX_TRANSPARENT를 지워도 1 tick 안에 복구(CI 점검).
+- 실제 Windows 검증은 CI(`tools/ci_desktop_check.py`)가 GitHub windows 러너의 실제 데스크톱에서 함(Win+D, explorer 재시작, 클릭 통과,
+  배치 편집 드래그·저장·재시작 복원, 중복 실행, 자동 실행, 유휴 CPU/메모리). 결과는 Actions의 Job Summary와 `ci-report` 아티팩트(스크린샷, log.txt).
+  - 숨은 옵션: `--edit-mode`(배치 편집 켠 상태로 시작; 트레이는 자동화로 못 누르므로 CI 전용), `--exit-after N`, `--no-duplicate-dialog`.
+  - 레이어드 창은 알파 0인 픽셀에서는 WS_EX_TRANSPARENT가 없어도 클릭이 통과함 → 클릭 통과 점검은 "그려진 글자 픽셀"에서 하고,
+    WS_EX_TRANSPARENT를 잠깐 지운 대조 실험에서 그 픽셀이 실제로 잡히는지 확인함. (같은 이유로 ② 구역 상자는 모든 픽셀 알파 ≥ 2/255.)
 
 ### 말씀 데이터
 - 원문: https://bereanbible.com/bsb.txt (+ 시편 표제 확인용 bsb_usfm.zip). SHA-256은 `tools/bsb.py`에 고정.
 - `python3 -I tools/bsb.py download` → `tools/.cache/`(git 제외). `python3 -I tools/bsb.py lookup "John 3:16"`으로 원문 조회.
-- `tools/verse_plan.tsv`(날짜→구절) 수정 후 `python3 -I tools/build_verses.py`로 `versedesk/data/verses.json` 재생성. 본문을 손으로 쓰지 말 것.
+- `tools/verse_plan.tsv`(날짜→구절) 수정 후 `python3 -I tools/seasonal.py` → `python3 -I tools/build_verses.py`로 `versedesk/data/verses.json` 재생성.
+  본문을 손으로 쓰지 말 것. 테스트가 특별한 날(1/1, 1/2, 2/14, 2/29, 3/1, 3/20, 5/5, 5/8, 8/15, 10/31, 11/25, 12/24, 12/25, 12/31) 구절과
+  계절 배치(대림절 12월, 1/6 주현절, 3/24~4/7 고난·부활)가 유지되는지 확인함.
+- 판(edition): bsb.txt에는 판 표시가 없음. Last-Modified 2026-07-31, 공식 changelog 2026-07-31 항목까지 반영된 본문(README·verses.json source에 기록).
+  출판사는 같은 주소의 파일을 고쳐 올리므로 다시 받으면 해시가 달라질 수 있음 → 그때는 366개 구절 비교 후 SOURCES 갱신.
+- 원문 그대로를 지킴: 다른 절에서 열린 따옴표로 끝나는 구절(끝의 ”)도 고치지 않음(바꾸면 BSB 이름을 쓰지 말라는 출판사 요청).
 
 ### 검증된 사실 (CI의 실제 윈도우 바탕화면에서 확인, 2026-11)
 - windows-latest(Server 2025, 빌드 26100 = Win11 24H2 구조): Progman이 DefView를 품음. Win+D → 앱 최소화 후 Progman이 올라옴
-  → 위젯이 작업표시줄 바로 아래 topmost로 들려 보임 → 다시 Win+D/앱 복원 시 정상 위치로 내려감. 45개 점검 통과.
+  → 위젯이 작업표시줄 바로 아래 topmost로 들려 보임 → 다시 Win+D/앱 복원 시 정상 위치로 내려감.
 - windows-2022(Server 2022, 빌드 20348 = Win10 구조): Win+D 때 DefView가 새 WorkerW로 옮겨지고 그 WorkerW가 올라옴
-  → host 재탐색으로 따라감. 45개 점검 통과. explorer 재시작 후에도 같은 창(HWND)으로 계속 바탕화면 위에 있음.
+  → host 재탐색으로 따라감. explorer 재시작 후에도 같은 창(HWND)으로 계속 바탕화면 위에 있음.
+- 두 러너 모두: Win+D 상태에서 그려진 글자 픽셀 클릭이 바탕화면(SysListView32)으로 통과. 유휴 CPU 약 0.15%(코어 1개 기준),
+  작업 집합 약 69MB(onefile 실행기 포함 2개 프로세스). exe 약 25MB. 러너 화면은 1024x768 한 개라 DPI/다중 모니터는 사용자 확인 필요.
 
 ### 빌드·테스트
-- 로컬(리눅스): `QT_QPA_PLATFORM=offscreen python -m pytest -q` (Qt용 시스템 라이브러리 libegl1 등 필요)
-- CI: push마다 windows-latest에서 테스트 → PyInstaller(`VerseDesk.spec`) → 아티팩트 `VerseDesk-exe` → 바탕화면 점검. main push면 Release `build-N` 생성.
+- 로컬(리눅스): `pip install -r requirements-dev.txt` 후 `QT_QPA_PLATFORM=offscreen python -m pytest -q`
+  (Qt용 시스템 라이브러리 libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 필요; 시스템 python에는 pytest가 없으니 venv 사용)
+- CI(`.github/workflows/build.yml`): push마다 windows-latest·windows-2022에서 테스트 → PyInstaller(`VerseDesk.spec`) → 아티팩트 `VerseDesk-exe`
+  (windows-latest만) → 바탕화면 점검. ubuntu의 data 작업이 공식 bsb.txt를 받아 verses.json이 그대로인지 확인(사이트 변경 시 경고만).
+  main push면 release 작업이 GitHub CLI(`gh`)로 Release `build-N` 생성(main 실행은 취소 안 됨), 다른 브랜치는 dry run(다운로드·gh 확인만).
 - 저장소는 public. 브랜치 규칙: 작업 브랜치에서 개발, PR은 사용자가 요청할 때만.
