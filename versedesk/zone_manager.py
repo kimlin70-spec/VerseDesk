@@ -317,7 +317,12 @@ class ZoneManager(QObject):
         if z is None:
             return
         shown_h = TITLE_H if z.collapsed else height
-        placed = place_on_screens(Rect(x, y, width, shown_h), rects, prim)  # what the user sees stays on a screen
+        # Keep it on the monitor the user dropped it on (the one under its title bar), fully
+        # inside that monitor; only a zone dropped off every screen goes to the main one.
+        i, _area = best_screen(Rect(x, y, width, TITLE_H), rects)
+        if i < 0:
+            i, _area = best_screen(Rect(x, y, width, shown_h), rects)
+        placed = clamp_into(Rect(x, y, width, shown_h), rects[i] if i >= 0 else prim)
 
         def mutate(s: Settings) -> None:
             zz = find_zone(s.zones, zid)

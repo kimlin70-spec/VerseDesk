@@ -197,3 +197,14 @@ def test_the_item_count_stays_visible_with_a_long_name(qapp):
         QPainter.drawText = original
     assert any(t.endswith("(12)") for t in shown), shown
     w.deleteLater()
+
+
+def test_webdav_shares_are_accepted_with_their_windows_name(qapp):
+    """Qt turns \\\\host@SSL\\... (e.g. SharePoint) into a webdavs:// URL; keep the Windows path."""
+    m = QMimeData()
+    m.setUrls([QUrl("webdavs://tenant.sharepoint.com/DavWWWRoot/sites/team/a.docx"),
+               QUrl("webdav://nas/share/b.txt")])
+    assert local_paths_from_mime(m) == [
+        "\\\\tenant.sharepoint.com@SSL\\DavWWWRoot\\sites\\team\\a.docx",
+        "\\\\nas\\share\\b.txt",
+    ]

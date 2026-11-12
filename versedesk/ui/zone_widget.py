@@ -78,13 +78,16 @@ def local_paths_from_mime(mime) -> list[str]:
     if mime is None or not mime.hasUrls():
         return out
     for url in mime.urls():
-        if not url.isLocalFile():
+        webdav = url.scheme() in ("webdav", "webdavs") and bool(url.host())
+        if not url.isLocalFile() and not webdav:
             continue
         if url.host():
             # A share (\\server\\share\\...). Qt keeps a non-ASCII server name (e.g. a PC called
             # 김철수-PC) in its ACE form "xn--..." which Windows would not find: decode it.
             host = QUrl.fromAce(url.host(QUrl.ComponentFormattingOption.FullyEncoded).encode("ascii"),
                                 QUrl.AceProcessingOption.IgnoreIDNWhitelist)
+            if url.scheme() == "webdavs":
+                host += "@SSL"  # \\\\server@SSL\\... (HTTPS WebDAV, e.g. SharePoint)
             local = "//" + host + url.path(QUrl.ComponentFormattingOption.FullyDecoded)
         else:
             local = url.toLocalFile()

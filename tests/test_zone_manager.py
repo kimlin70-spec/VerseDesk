@@ -308,3 +308,22 @@ def test_a_zone_removed_while_a_menu_or_dialog_is_open_is_deleted_only_afterward
     m._flush_doomed()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     assert not shiboken6.isValid(w)
+
+
+def test_a_zone_dropped_at_the_edge_of_the_second_monitor_stays_there(qapp, tmp_path):
+    primary, second = Rect(0, 0, 1920, 1040), Rect(1920, 0, 1707, 960)
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    m = ZoneManager(store, NullDesktopLayer(), notify=lambda *a, **k: None,
+                    screen_rects=lambda: ([primary, second], primary), apply_reload=lambda r: None,
+                    io=FakeIO(), ask_name=lambda t, d: "업무", confirm_delete=lambda n, c: True)
+    m.start()
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    m.set_geometry(zid, 3566, 300, 340, 260)  # mostly past the right edge of the second monitor
+    z = _saved(tmp_path)[0]
+    assert (z["x"], z["y"]) == (second.right - 340, 300)
+    m.set_collapsed(zid, True)
+    m.set_geometry(zid, 2400, 951, 340, 260)  # collapsed bar dropped across the bottom edge
+    z = _saved(tmp_path)[0]
+    assert (z["x"], z["y"]) == (2400, second.bottom - TITLE_H)

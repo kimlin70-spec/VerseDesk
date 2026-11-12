@@ -51,11 +51,13 @@ def _strip(path: str) -> str:
 
 
 def _drop_long_prefix(p: str) -> str:
-    """'\\\\?\\C:\\x' and '\\\\?\\UNC\\server\\share' name the same items as 'C:\\x' and '\\\\server\\share'."""
-    if p[:8].upper() == "\\\\?\\UNC\\":
-        return "\\\\" + p[8:]
-    if p.startswith("\\\\?\\") or p.startswith("//?/"):
-        return p[4:]
+    """'\\\\?\\C:\\x' and '\\\\?\\UNC\\server\\share' name the same items as 'C:\\x' and
+    '\\\\server\\share' (either slash).  Other '\\\\?\\' forms (e.g. Volume{GUID}) are kept."""
+    q = p.replace("/", "\\")
+    if q[:8].upper() == "\\\\?\\UNC\\":
+        return "\\\\" + q[8:]
+    if q.startswith("\\\\?\\") and len(q) >= 6 and q[4].isalpha() and q[5] == ":":
+        return q[4:]
     return p
 
 

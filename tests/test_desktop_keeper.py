@@ -287,3 +287,29 @@ def test_new_and_clicked_widgets_come_to_the_front_of_our_group(env):
     assert wm.z.index(0x9100) < wm.z.index(0x9200)  # the keeper does not undo the order
     assert all(not topmost(wm, h) for h in (0x9000, 0x9100, 0x9200))
     assert max(wm.z.index(h) for h in (0x9000, 0x9100, 0x9200)) < wm.z.index(prog)
+
+
+def test_our_own_stacking_order_survives_show_desktop(env):
+    """A zone brought to the front stays in front of the other widgets when Win+D lifts
+    them and when they sink back afterwards."""
+    wm, d = env
+    prog = wm.explorer_24h2()
+    wm.taskbar()
+    app = wm.new("Notepad")
+    a, b = make_widget(wm, 0x9100), make_widget(wm, 0x9200)
+    layer = d.Win32DesktopLayer("bottom")
+    layer.attach(a)
+    layer.attach(b)
+    layer.start()
+    layer.bring_to_front(b)
+    assert wm.z.index(0x9200) < wm.z.index(0x9100)
+    wm.win_d_24h2()
+    layer._tick()
+    assert topmost(wm, 0x9100) and topmost(wm, 0x9200)
+    assert wm.z.index(0x9200) < wm.z.index(0x9100), "raised: order kept"
+    wm.restore_app(app, prog)
+    for _ in range(3):
+        layer._tick()
+    assert not topmost(wm, 0x9100) and not topmost(wm, 0x9200)
+    assert wm.z.index(0x9200) < wm.z.index(0x9100), "dropped: order kept"
+    assert wm.z.index(app) < wm.z.index(0x9200)

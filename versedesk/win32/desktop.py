@@ -442,6 +442,18 @@ class Win32DesktopLayer(QObject):
 
     # ---- the work
 
+    def _entries_in_z_order(self, top_first: bool) -> list[_Pinned]:
+        entries = list(self._pinned.values())
+        rank: dict[int, int] = {}
+        w = api.h(api.GetTopWindow(None))
+        for i in range(MAX_WALK):
+            if not w:
+                break
+            rank[w] = i
+            w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
+        entries.sort(key=lambda e: rank.get(e.hwnd, MAX_WALK), reverse=not top_first)
+        return entries
+
     def _own(self) -> set[int]:
         return {e.hwnd for e in self._pinned.values() if e.hwnd}
 
@@ -494,7 +506,11 @@ class Win32DesktopLayer(QObject):
                 self._raised = raised
                 log.info("desktop %s", "raised (Show desktop): lifting widgets" if raised else "back to normal")
                 self._timer.setInterval(RAISED_TICK_MS if raised else TICK_MS)
-            for entry in list(self._pinned.values()):
+            # Each widget is placed relative to the desktop/taskbar one by one. Going through
+            # them in their current order (top-first when they sink back on the desktop,
+            # bottom-first when they are lifted) keeps their order among themselves, so a
+            # zone the user brought to the front stays in front after Win+D.
+            for entry in self._entries_in_z_order(top_first=not raised):
                 self._sync_entry(entry, host)
             if not raised and self._sentinel and host and api.h(api.FindWindowExW(None, host, "Static", SENTINEL_TITLE)):
                 # the desktop dropped without passing the sentinel: put it back to the bottom
