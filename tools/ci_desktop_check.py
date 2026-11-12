@@ -252,10 +252,6 @@ def run(exe: Path, report: Path) -> None:
             return
         time.sleep(4)
         screenshot(report, "01-started")
-        print_crop("verse-on-white", verse)
-        set_desktop_color((22, 40, 70))
-        time.sleep(1.5)
-        print_crop("verse-on-dark", verse)
         check_widget(verse, "start")
 
         # A normal application window on top of the verse must stay on top of it.
@@ -293,6 +289,11 @@ def run(exe: Path, report: Path) -> None:
             fg = api.h(api.GetForegroundWindow())
             print(f"  after Win+D: foreground={api.describe(fg)}\n" + describe_desktop(), flush=True)
             screenshot(report, "03-after-win-d")
+            # the verse is now in front of the (plain-coloured) desktop: show how it renders
+            print_crop("verse-on-white", verse)
+            set_desktop_color((22, 40, 70))
+            time.sleep(1.5)
+            print_crop("verse-on-dark", verse)
             desktop_came_forward = (zindex(host) >= 0 and zindex(host) < zindex(tw)) or bool(api.IsIconic(tw))
             if expect("Win+D took effect on this machine", desktop_came_forward,
                       f"z(host)={zindex(host)} z(test)={zindex(tw)} iconic={bool(api.IsIconic(tw))}", warn_only=True):
