@@ -5,7 +5,9 @@
 It starts the exe with a clean profile and verifies, through the Win32 API, the behaviour
 the user cannot easily test one by one:
   * the verse window exists, is a tool window (no taskbar/Alt+Tab), never activates,
-    is click-through, and is owned by / sits directly on the desktop window;
+    is not owned by Explorer and sits directly above the desktop window;
+  * click-through: a hit test on a part of the verse no other window covers must land on
+    the window *below* it (where every part is covered the test cannot decide: SKIP);
   * a normal application window placed on top of it stays on top;
   * after Win+D (Show desktop) the verse is still visible above the desktop, and the
     normal window is not; Win+D again restores the normal window above the verse;
@@ -16,7 +18,8 @@ the user cannot easily test one by one:
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
-not behave like a normal desktop, so the log explains rather than hides it.
+not behave like a normal desktop, so the log explains rather than hides it.  SKIP means
+a check could not be decided at that moment (it is repeated where it can be).
 """
 
 from __future__ import annotations
@@ -224,12 +227,44 @@ def check_widget(verse: int, label: str) -> None:
     ok, blocker = check_placement(verse, host)
     expect(f"{label}: sits directly above the desktop", ok,
            f"blocker={api.describe(blocker)}" if blocker else ("host above verse" if not ok else ""))
+    check_click_through(verse, label)
+
+
+def uncovered_point(verse: int) -> tuple[int, int] | None:
+    """A point of the verse that no visible window above it covers, or None if fully covered."""
+    order = top_level_windows()
+    if verse not in order:
+        return None
+    covers = []
+    for w in order[: order.index(verse)]:
+        if api.IsWindowVisible(w) and not api.IsIconic(w) and not api.is_cloaked(w):
+            covers.append(api.window_rect(w))
     l, t, r, b = api.window_rect(verse)
-    pt = wintypes.POINT((l + r) // 2, (t + b) // 2)
-    under = api.h(user32.WindowFromPoint(pt))
+    for fy in (0.5, 0.3, 0.7, 0.15, 0.85):
+        for fx in (0.5, 0.3, 0.7, 0.15, 0.85, 0.05, 0.95):
+            x, y = int(l + (r - l) * fx), int(t + (b - t) * fy)
+            if not any(cl <= x < cr and ct <= y < cb for cl, ct, cr, cb in covers):
+                return x, y
+    return None
+
+
+def check_click_through(verse: int, label: str) -> None:
+    """A click on the verse must reach the window *below* it.  Only meaningful at a point
+    no other window covers; otherwise the result says nothing and is reported as SKIP."""
+    name = f"{label}: a click on the verse reaches the window behind it"
+    p = uncovered_point(verse)
+    if p is None:
+        record(name, "SKIP", "every part of the verse is covered by another window here")
+        return
+    under = api.h(user32.WindowFromPoint(wintypes.POINT(*p)))
     root = api.h(user32.GetAncestor(under, api.GA_ROOT)) if under else 0
-    expect(f"{label}: clicks pass through to what is behind", root != verse,
-           f"WindowFromPoint -> {api.describe(under)} (root {api.describe(root)})")
+    detail = f"WindowFromPoint{p} -> {api.describe(under)} (root {api.describe(root)})"
+    if root == verse:
+        record(name, "FAIL", detail)
+    elif root and zindex(root) > zindex(verse):
+        record(name, "PASS", detail)
+    else:  # something we did not see as covering answered: cannot judge
+        record(name, "WARN", "inconclusive: " + detail)
 
 
 def run(exe: Path, report: Path) -> None:
@@ -300,13 +335,18 @@ def run(exe: Path, report: Path) -> None:
                 expect("after Win+D the verse is above the desktop", zindex(verse) < zindex(host),
                        f"z(verse)={zindex(verse)} z(host)={zindex(host)}")
                 expect("after Win+D the verse is not covered", visible_on_top_at(verse, [host, tw]))
+                # nothing covers the verse now, so this hit test really decides click-through
+                check_click_through(verse, "after Win+D")
                 press_win_d()
                 time.sleep(3)
                 screenshot(report, "04-after-second-win-d")
-                expect("second Win+D brings the normal window back above the verse",
-                       zindex(tw) < zindex(verse) and not api.IsIconic(tw),
-                       f"z(test)={zindex(tw)} z(verse)={zindex(verse)}", warn_only=True)
-                check_widget(verse, "after Win+D twice")
+                if expect("second Win+D brings the normal window back above the verse",
+                          zindex(tw) < zindex(verse) and not api.IsIconic(tw),
+                          f"z(test)={zindex(tw)} z(verse)={zindex(verse)}", warn_only=True):
+                    check_widget(verse, "after Win+D twice")
+                else:  # the desktop may still be shown: then the verse is rightly lifted
+                    expect("verse still above the shown desktop", zindex(verse) < zindex(find_desktop_host()),
+                           f"z(verse)={zindex(verse)} z(host)={zindex(find_desktop_host())}", warn_only=True)
 
         # explorer.exe restart: the verse must re-attach to the new desktop window.
         if explorer_running():
@@ -388,7 +428,8 @@ def main() -> int:
         with open(summary, "a", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
     failed = [r for r in RESULTS if r["status"] == "FAIL"]
-    print(f"\n{len(RESULTS)} checks, {len(failed)} failed, {sum(r['status'] == 'WARN' for r in RESULTS)} warnings")
+    count = {k: sum(r["status"] == k for r in RESULTS) for k in ("WARN", "SKIP")}
+    print(f"\n{len(RESULTS)} checks, {len(failed)} failed, {count['WARN']} warnings, {count['SKIP']} skipped")
     return 1 if failed else 0
 
 
