@@ -83,19 +83,32 @@ class Settings:
 # --------------------------------------------------------------------------- validation
 
 
-def _is_number(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+def _num(v: Any) -> float | None:
+    """A number, also accepting numeric text such as "32" (easy to type in Notepad)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if v == v else None  # v == v rejects NaN
+    if isinstance(v, str):
+        try:
+            f = float(v.strip())
+        except ValueError:
+            return None
+        return f if f == f else None
+    return None
 
 
 def _int_in(v: Any, lo: int, hi: int) -> int | None:
-    if _is_number(v) and v == v and lo <= v <= hi:  # v == v rejects NaN
-        return int(round(v))
+    n = _num(v)
+    if n is not None and lo <= n <= hi:
+        return int(round(n))
     return None
 
 
 def _float_in(v: Any, lo: float, hi: float) -> float | None:
-    if _is_number(v) and v == v and lo <= v <= hi:
-        return float(v)
+    n = _num(v)
+    if n is not None and lo <= n <= hi:
+        return n
     return None
 
 
@@ -104,13 +117,18 @@ def _coord(v: Any) -> int | None:
     return _int_in(v, -100_000, 100_000)
 
 
-def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
-    """Build Settings from parsed JSON. Returns (settings, warnings)."""
+def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Settings, list[str]]:
+    """Build Settings from parsed JSON. Returns (settings, warnings).
+
+    A missing key gets its default. An invalid value keeps the ``previous`` value (when
+    re-reading a file the user is editing) or, at first load, the default.
+    """
     warnings: list[str] = []
     s = Settings()
+    prev = previous.copy() if previous is not None else Settings()
     if not isinstance(data, dict):
-        warnings.append("settings.json top level is not an object; using defaults")
-        return s, warnings
+        warnings.append("settings.json top level is not an object; keeping the previous settings")
+        return prev, warnings
 
     known = {"version", "autostart", "desktop_mode", "debug_log", "verse"}
     s.extra = {k: copy.deepcopy(v) for k, v in data.items() if k not in known}
@@ -119,18 +137,21 @@ def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
         if isinstance(data["autostart"], bool):
             s.autostart = data["autostart"]
         else:
+            s.autostart = prev.autostart
             warnings.append("autostart must be true or false")
 
     if "debug_log" in data:
         if isinstance(data["debug_log"], bool):
             s.debug_log = data["debug_log"]
         else:
+            s.debug_log = prev.debug_log
             warnings.append("debug_log must be true or false")
 
     if "desktop_mode" in data:
         if data["desktop_mode"] in DESKTOP_MODES:
             s.desktop_mode = data["desktop_mode"]
         else:
+            s.desktop_mode = prev.desktop_mode
             warnings.append(f"desktop_mode must be one of {DESKTOP_MODES}")
 
     v = data.get("verse", {})
@@ -145,6 +166,7 @@ def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
     elif _coord(x) is not None and _coord(y) is not None:
         vs.x, vs.y = _coord(x), _coord(y)
     else:
+        vs.x, vs.y = prev.verse.x, prev.verse.y
         warnings.append("verse.x / verse.y must both be numbers (or both null)")
 
     def take(key: str, conv: Callable[[Any], Any], what: str) -> None:
@@ -152,7 +174,8 @@ def settings_from_dict(data: Any) -> tuple[Settings, list[str]]:
             return
         val = conv(v[key])
         if val is None:
-            warnings.append(f"verse.{key} {what}; using default {getattr(vs, key)!r}")
+            setattr(vs, key, getattr(prev.verse, key))
+            warnings.append(f"verse.{key} {what}; keeping {getattr(vs, key)!r}")
         else:
             setattr(vs, key, val)
 
@@ -210,9 +233,16 @@ def dumps(s: Settings) -> str:
 # --------------------------------------------------------------------------- file helpers
 
 
-def read_text_lenient(path: Path) -> str:
-    """Read a text file the user may have edited with Notepad (UTF-8, UTF-8 BOM or ANSI)."""
-    raw = path.read_bytes()
+def decode_text(raw: bytes) -> str:
+    """Decode a file the user may have saved with Notepad or PowerShell:
+    UTF-8 (with or without BOM), UTF-16 (with BOM, or BOM-less ASCII-range text) or ANSI."""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    if len(raw) >= 4 and raw[1] == 0 and raw[3] == 0 and raw[0] != 0:
+        try:
+            return raw.decode("utf-16-le")
+        except UnicodeDecodeError:
+            pass
     try:
         return raw.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -220,6 +250,10 @@ def read_text_lenient(path: Path) -> str:
             return raw.decode("mbcs")  # Windows ANSI code page (e.g. CP949 on Korean Windows)
         except (LookupError, UnicodeDecodeError):
             return raw.decode("cp1252", errors="replace")
+
+
+def read_text_lenient(path: Path) -> str:
+    return decode_text(path.read_bytes())
 
 
 def describe_json_error(name: str, e: json.JSONDecodeError) -> str:
@@ -271,6 +305,7 @@ class LoadResult:
     first_run: bool = False  # the file did not exist
     error: str | None = None  # the file existed but could not be used
     warnings: list[str] = field(default_factory=list)
+    unreadable: bool = False  # could not even be opened (locked by another program?): retried later
 
 
 # --------------------------------------------------------------------------- store
@@ -291,6 +326,7 @@ class SettingsStore:
         self._sig: _Signature | None = None
         self._digest: str | None = None
         self._broken_sig: _Signature | None = None  # signature of a file we failed to parse
+        self._unreadable = False  # the existing file could not be opened yet
 
     # ---- reading
 
@@ -299,28 +335,38 @@ class SettingsStore:
             self.settings = Settings()
             self._sig, self._digest = None, None
             return LoadResult(self.settings.copy(), first_run=True)
-        result = self._read()
+        result = self._read(previous=None)
         if result.error is None:
             self.settings = result.settings.copy()
         else:
-            self._backup_broken()
+            if not result.unreadable:
+                self._backup_broken()
             self.settings = Settings()
             result.settings = self.settings.copy()
         return result
 
-    def _read(self) -> LoadResult:
+    def _read(self, previous: Settings | None) -> LoadResult:
         sig = _stat_signature(self.path)
+        raw = None
+        last_err: OSError | None = None
+        for attempt in range(3):  # antivirus, backup or sync tools may hold the file briefly
+            try:
+                raw = self.path.read_bytes()
+                break
+            except OSError as e:
+                last_err = e
+                time.sleep(0.15 * (attempt + 1))
+        if raw is None:
+            self._unreadable = True
+            self._sig, self._digest = None, None  # keep trying on every poll
+            return LoadResult(Settings(), error=f"settings.json: cannot open the file: {last_err}", unreadable=True)
+        self._unreadable = False
         try:
-            raw = self.path.read_bytes()
-            text = read_text_lenient(self.path)
-            data = json.loads(text)
+            data = json.loads(decode_text(raw))
         except json.JSONDecodeError as e:
             self._broken_sig = sig
             return LoadResult(Settings(), error=describe_json_error("settings.json", e))
-        except OSError as e:
-            self._broken_sig = sig
-            return LoadResult(Settings(), error=f"settings.json: cannot read: {e}")
-        settings, warnings = settings_from_dict(data)
+        settings, warnings = settings_from_dict(data, previous)
         self._sig = sig
         self._digest = hashlib.sha256(raw).hexdigest()
         self._broken_sig = None
@@ -357,7 +403,7 @@ class SettingsStore:
         """
         if not self.changed_on_disk():
             return None
-        result = self._read()
+        result = self._read(previous=self.settings)
         if result.error is None:
             self.settings = result.settings.copy()
         else:
@@ -367,6 +413,14 @@ class SettingsStore:
     # ---- writing
 
     def save(self) -> bool:
+        if self._unreadable and self.path.exists():
+            # Never replace a file we have not been able to read: it holds the user's settings.
+            result = self._read(previous=self.settings)
+            if result.unreadable:
+                log.error("settings.json still cannot be opened; not saving over it")
+                return False
+            if result.error is None:
+                self.settings = result.settings.copy()
         try:
             if self._broken_sig is not None and _stat_signature(self.path) == self._broken_sig:
                 self._backup_broken()

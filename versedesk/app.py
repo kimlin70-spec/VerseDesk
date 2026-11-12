@@ -56,6 +56,11 @@ def _file_sig(path: Path) -> tuple[int, int] | None:
     return (st.st_mtime_ns, st.st_size)
 
 
+def _warnings_notice(warnings: list[str]) -> str:
+    keys = ", ".join(dict.fromkeys(w.split(" ", 1)[0] for w in warnings))
+    return f"settings.json의 일부 값이 올바르지 않아 적용하지 않았습니다: {keys}. 자세한 내용은 log.txt에 있습니다."
+
+
 def _to_rect(qrect) -> Rect:
     return Rect(qrect.x(), qrect.y(), qrect.width(), qrect.height())
 
@@ -118,13 +123,20 @@ class VerseDeskApp(QObject):
 
         for problem in load_result.warnings:
             log.warning("settings: %s", problem)
-        if load_result.error:
+        self._startup_notice = None
+        if load_result.error and load_result.unreadable:
+            log.error("%s — starting with defaults and retrying", load_result.error)
+            self._startup_notice = (
+                "settings.json을 지금 열 수 없어(다른 프로그램이 사용 중일 수 있음) 기본 설정으로 시작했습니다. "
+                "파일을 열 수 있게 되면 자동으로 다시 적용합니다."
+            )
+        elif load_result.error:
             log.error("%s — using defaults (a copy was kept as settings.json.bad)", load_result.error)
             self._startup_notice = (
                 "settings.json을 읽지 못해 기본 설정으로 시작했습니다. 원래 파일은 settings.json.bad로 보관했습니다."
             )
-        else:
-            self._startup_notice = None
+        elif load_result.warnings:
+            self._startup_notice = _warnings_notice(load_result.warnings)
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -350,6 +362,9 @@ class VerseDeskApp(QObject):
         if result is None:
             return
         if result.error:
+            if result.unreadable:
+                log.warning("%s — will retry", result.error)
+                return
             log.error("%s — keeping the previous settings until the file is fixed", result.error)
             self.tray.notify(
                 "settings.json 형식 오류",
@@ -359,6 +374,8 @@ class VerseDeskApp(QObject):
             return
         for problem in result.warnings:
             log.warning("settings: %s", problem)
+        if result.warnings:
+            self.tray.notify("settings.json", _warnings_notice(result.warnings), warning=True)
         s = self.store.settings
         log.info("settings.json changed outside the app; applying it")
         self.verse_widget.set_appearance(VerseAppearance.from_settings(s.verse))

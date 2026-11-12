@@ -177,3 +177,57 @@ def test_deleted_file_is_recreated_on_next_save(tmp_path):
     store.update(lambda s: None)
     assert path.exists()
     time.sleep(0)  # keep linters quiet about unused import on some platforms
+
+
+def test_numeric_strings_are_accepted():
+    s, warnings = settings_from_dict({"verse": {"font_size": "32", "width": " 600 ", "x": "10", "y": "20"}})
+    assert warnings == []
+    assert (s.verse.font_size, s.verse.width, s.verse.x, s.verse.y) == (32.0, 600, 10, 20)
+
+
+def test_invalid_value_on_reload_keeps_the_previous_value(tmp_path):
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    store.load()
+    store.update(lambda s: setattr(s.verse, "font_size", 30))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["verse"]["font_size"] = 250  # out of range typed by the user
+    path.write_text(json.dumps(data), encoding="utf-8")
+    _bump_mtime(path)
+    r = store.poll()
+    assert r is not None and r.warnings
+    assert store.settings.verse.font_size == 30  # not reset to the default 20
+
+
+def test_utf16_files_are_read(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_bytes(json.dumps({"verse": {"font_size": 28}}).encode("utf-16"))  # with BOM
+    assert SettingsStore(path).load().settings.verse.font_size == 28
+    path.write_bytes(json.dumps({"verse": {"font_size": 27}}).encode("utf-16-le"))  # no BOM
+    assert SettingsStore(path).load().settings.verse.font_size == 27
+
+
+def test_transiently_locked_file_is_not_treated_as_broken_or_overwritten(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"verse": {"font_size": 33, "x": 5, "y": 6}}), encoding="utf-8")
+    real_read = Path.read_bytes
+    locked = {"on": True}
+
+    def flaky(self):
+        if self == path and locked["on"]:
+            raise PermissionError("in use by another process")
+        return real_read(self)
+
+    monkeypatch.setattr(Path, "read_bytes", flaky)
+    store = SettingsStore(path)
+    r = store.load()
+    assert r.unreadable and r.error
+    assert not (tmp_path / "settings.json.bad").exists()
+    store.update(lambda s: setattr(s, "autostart", False))  # a save while still locked...
+    assert json.loads(real_read(path))["verse"]["font_size"] == 33  # ...must not clobber the file
+    locked["on"] = False
+    reloaded = store.poll()  # the lock is gone: the user's settings come back
+    assert reloaded is not None and reloaded.error is None
+    assert store.settings.verse.font_size == 33 and store.settings.verse.x == 5
