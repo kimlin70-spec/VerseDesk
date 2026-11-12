@@ -62,3 +62,48 @@ def test_matches_official_source_when_available():
         pytest.skip("official BSB source not downloaded (python3 -I tools/bsb.py download)")
     r = subprocess.run([sys.executable, "-I", str(tools / "build_verses.py"), "--check"], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+# Special days keep their chosen passage (tools/seasonal.py and the review tools never move them).
+SPECIAL_DAYS = {
+    "01-01": "Lamentations 3:22",  # New Year: His mercies are new every morning
+    "01-02": "Isaiah 43:19",
+    "02-14": "1 Corinthians 13:4",
+    "02-29": "Psalm 118:24",
+    "03-01": "Galatians 5:1",
+    "03-20": "Song of Solomon 2:11",
+    "05-05": "Matthew 19:14",
+    "05-08": "Exodus 20:12",
+    "08-15": "John 8:36",
+    "10-31": "Ephesians 2:8",
+    "11-25": "Psalm 100:4",
+    "12-24": "Isaiah 9:6",
+    "12-25": "Luke 2:10",
+    "12-31": "Psalm 90:12",
+}
+
+
+def test_special_days_keep_their_passages(doc):
+    by_date = {v["date"]: v["reference"] for v in doc["verses"]}
+    for date, start in SPECIAL_DAYS.items():
+        ref = by_date[date]
+        assert ref == f"{start} (BSB)" or ref.startswith(start + "–"), (date, ref)
+
+
+def test_seasonal_arrangement_is_applied(tmp_path, monkeypatch):
+    """tools/seasonal.py must not change the shipped plan: run it after every plan edit."""
+    import importlib.util
+    import sys
+
+    tools = Path(__file__).resolve().parent.parent / "tools"
+    plan = tools / "verse_plan.tsv"
+    copy = tmp_path / "verse_plan.tsv"
+    copy.write_bytes(plan.read_bytes())
+    spec = importlib.util.spec_from_file_location("versedesk_seasonal", tools / "seasonal.py")
+    seasonal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(seasonal)
+    monkeypatch.setattr(sys, "argv", ["seasonal.py", str(copy)])
+    seasonal.main()
+    # compare lines, not bytes: a Windows checkout may use CRLF line endings
+    assert copy.read_text(encoding="utf-8").splitlines() == plan.read_text(encoding="utf-8").splitlines()
+    assert set(SPECIAL_DAYS) == seasonal.FIXED

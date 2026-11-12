@@ -90,7 +90,7 @@ def main():
                 plan[victim], plan[c] = plan[c], plan[victim]
     adj = [(a, b) for a, b in zip(dates, dates[1:]) if book(plan[a]) == book(plan[b])]
     print(f"same book on consecutive days: {len(adj)} {adj}")
-    path.write_text("\n".join(header + [f"{d}\t{plan[d]}" for d in dates]) + "\n", encoding="utf-8")
+    path.write_text("\n".join(header + [f"{d}\t{plan[d]}" for d in dates]) + "\n", encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":
