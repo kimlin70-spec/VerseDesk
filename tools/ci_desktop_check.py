@@ -14,7 +14,8 @@ the user cannot easily test one by one:
   * after explorer.exe is killed and restarted, the verse re-attaches to the new desktop;
   * a second launch exits immediately (single instance);
   * autostart (HKCU Run) is registered on first run; settings.json and log.txt exist;
-  * `--exit-after` quits cleanly with exit code 0.
+  * `--exit-after` quits cleanly with exit code 0;
+  * resource use while idle (CPU, memory) is measured and reported (WARN if high).
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -177,6 +178,44 @@ def print_crop(name: str, hwnd: int, margin: int = 12) -> None:
         print(f"  crop {name} failed: {e}", flush=True)
 
 
+def process_stats(image: str) -> list[tuple[int, float, int, int]]:
+    """(pid, cpu seconds, working set bytes, private bytes) of every process named ``image``."""
+    script = (f"Get-Process -Name {image} -ErrorAction SilentlyContinue | ForEach-Object "
+              "{ '{0} {1} {2} {3}' -f $_.Id, $_.TotalProcessorTime.TotalSeconds, $_.WorkingSet64, "
+              "$_.PrivateMemorySize64 }")
+    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                       capture_output=True, text=True, timeout=60)
+    rows = []
+    for line in r.stdout.split("\n"):
+        parts = line.split()
+        if len(parts) == 4:
+            try:
+                rows.append((int(parts[0]), float(parts[1].replace(",", ".")), int(parts[2]), int(parts[3])))
+            except ValueError:
+                pass
+    return rows
+
+
+def check_resources(seconds: float = 10.0) -> None:
+    """The app lives in the background all day: it must be light while idle."""
+    before = {pid: cpu for pid, cpu, _ws, _pv in process_stats("VerseDesk")}
+    start = time.time()
+    time.sleep(seconds)
+    after = process_stats("VerseDesk")
+    elapsed = time.time() - start
+    if not after:
+        record("resource use while idle", "WARN", "could not read process statistics")
+        return
+    cpu = sum(c - before.get(pid, c) for pid, c, _ws, _pv in after)
+    ws = sum(w for _p, _c, w, _pv in after)
+    pv = sum(p for _p, _c, _w, p in after)
+    pct = 100.0 * cpu / elapsed
+    detail = (f"{len(after)} processes (onefile launcher + app): idle CPU {pct:.2f}% of one core over "
+              f"{elapsed:.0f}s, working set {ws / 2**20:.0f} MB, private {pv / 2**20:.0f} MB")
+    expect("idle CPU stays low (under 2% of one core)", pct < 2.0, detail, warn_only=True)
+    expect("memory stays modest (working set under 200 MB)", ws < 200 * 2**20, detail, warn_only=True)
+
+
 def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
 
@@ -288,6 +327,7 @@ def run(exe: Path, report: Path) -> None:
         time.sleep(4)
         screenshot(report, "01-started")
         check_widget(verse, "start")
+        check_resources()
 
         # A normal application window on top of the verse must stay on top of it.
         l, t, r, b = api.window_rect(verse)
