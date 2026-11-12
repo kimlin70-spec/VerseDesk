@@ -505,9 +505,12 @@ class Win32DesktopLayer(QObject):
                 self._lift(entry, host)
             return
         if api.is_topmost(hwnd):
-            # the desktop dropped again: leave the topmost band first
+            # The desktop dropped again: leave the topmost band and sink in one go. Never
+            # gated or counted by the fight limiter, or a paused keeper could leave the
+            # widget at the top of the normal band, above every app window.
             api.SetWindowPos(hwnd, api.HWND_NOTOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
-            force = True
+            self._place_above(entry, host)
+            return
         if force or not check_placement(hwnd, host, self._own())[0]:
             if self._may_fix(entry):
                 self._place_above(entry, host)

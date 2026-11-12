@@ -237,3 +237,30 @@ def test_hidden_widget_is_left_alone_and_explorer_missing_is_harmless(env):
     layer._tick()
     assert "desktop host" in d.describe_desktop()
     layer.stop()
+
+
+def test_dropping_after_show_desktop_ignores_a_paused_fight_limiter(env):
+    wm, d = env
+    prog = wm.explorer_24h2()
+    wm.taskbar()
+    app = wm.new("Notepad")
+    w = make_widget(wm)
+    layer = d.Win32DesktopLayer("bottom")
+    layer.attach(w, click_through=True)
+    layer.start()
+    sneaky = wm.new("Fighter")
+    for _ in range(d.FIGHT_LIMIT + 3):  # trip the limiter
+        wm.z.remove(sneaky)
+        wm.z.insert(wm.z.index(prog), sneaky)
+        layer._tick()
+    wm.destroy(sneaky)
+    wm.win_d_24h2()
+    layer._tick()
+    assert topmost(wm, 0x9000)
+    wm.restore_app(app, prog)
+    for _ in range(3):
+        layer._tick()
+    assert not topmost(wm, 0x9000)
+    assert wm.z.index(app) < wm.z.index(0x9000)
+    assert directly_above(wm, 0x9000, prog)
+    layer.stop()
