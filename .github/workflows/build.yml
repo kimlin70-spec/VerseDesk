@@ -1,0 +1,92 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore: ["**.md"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: test, build exe, check on a real desktop
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Unit tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Stamp build number
+        run: python tools/write_build_info.py --build ${{ github.run_number }} --commit ${{ github.sha }}
+
+      - name: Build VerseDesk.exe
+        run: python -m PyInstaller --noconfirm --clean VerseDesk.spec
+
+      - name: Exe size
+        shell: pwsh
+        run: "'{0:N1} MB' -f ((Get-Item dist/VerseDesk.exe).Length / 1MB)"
+
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: VerseDesk-exe
+          path: dist/VerseDesk.exe
+          if-no-files-found: error
+
+      - name: Desktop behaviour check (live Windows desktop)
+        run: python tools/ci_desktop_check.py dist/VerseDesk.exe --report ci-report
+
+      - name: Upload check report (screenshots, log.txt)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report
+          path: ci-report/
+          if-no-files-found: ignore
+
+  release:
+    name: publish release (main only)
+    needs: windows
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VerseDesk-exe
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: VerseDesk build ${{ github.run_number }}
+          make_latest: "true"
+          files: dist/VerseDesk.exe
+          body: |
+            VerseDesk.exe — 설치 없이 바로 실행하는 단일 파일입니다.
+            처음 실행할 때 Windows SmartScreen 경고가 나오면 "추가 정보" → "실행"을 누르세요.
+            자세한 사용법은 README를 참고하세요.
+
+            commit ${{ github.sha }}
