@@ -220,3 +220,31 @@ def test_broken_user_verses_at_startup_is_notified_with_the_tray_visible(qapp, h
         assert errors and all(visible for _title, visible in errors)
     finally:
         shutdown(app)
+
+
+def test_exported_list_can_be_edited_and_shows_up(qapp, home, embedded, monkeypatch):
+    from versedesk import paths
+
+    app, today = make_app(qapp, home, embedded, dt.date(2026, 1, 3))
+    try:
+        opened = []
+        monkeypatch.setattr(app, "_open_in_editor", opened.append)
+        app.export_verses()
+        path = paths.user_verses_path()
+        assert opened == [path]
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert len(data["verses"]) == 366
+        assert app.verse_widget.text == "Verse number 3 for 01-03."  # nothing changes yet
+        for v in data["verses"]:
+            if v["date"] == "01-03":
+                v["text"] = "내가 고친 본문"
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        os.utime(path, ns=(1, 3))
+        app._poll_files()
+        assert app.verse_widget.text == "내가 고친 본문"
+        app.export_verses()  # again: the edit is kept, the old file is backed up
+        again = json.loads(path.read_text(encoding="utf-8"))
+        assert [v["text"] for v in again["verses"] if v["date"] == "01-03"] == ["내가 고친 본문"]
+        assert list(path.parent.glob("verses.backup-*.json"))
+    finally:
+        shutdown(app)

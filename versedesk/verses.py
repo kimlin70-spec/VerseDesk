@@ -166,3 +166,21 @@ def load_embedded(path: Path) -> dict[str, Verse]:
 def iter_dates(start: _dt.date, days: int) -> Iterable[_dt.date]:
     for i in range(days):
         yield start + _dt.timedelta(days=i)
+
+
+EXPORT_NOTE = (
+    "VerseDesk 구절 목록입니다. 날짜(date)별로 출처(reference)와 본문(text)을 고치고 저장하면 "
+    "2초 안에 바탕화면에 반영됩니다. 이 파일을 지우면 프로그램에 내장된 목록으로 돌아갑니다. "
+    "본문은 직접 치지 말고 BSB 원문에서 복사해 붙여 넣으면 오타가 없습니다."
+)
+
+
+def export_document(library: VerseLibrary) -> str:
+    """All 366 days as an editable verses.json: the user's own entries where they exist,
+    otherwise the built-in ones.  Loading it back gives exactly what is shown now."""
+    verses = []
+    for key in all_date_keys():
+        v = library.verse_for_key(key)
+        verses.append({"date": key, "reference": v.reference, "text": v.text})
+    doc = {"안내": EXPORT_NOTE, "verses": verses}
+    return json.dumps(doc, ensure_ascii=False, indent=2) + "\n"

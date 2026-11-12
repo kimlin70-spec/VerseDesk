@@ -148,3 +148,17 @@ def test_odd_user_files_are_reported_not_raised(tmp_path):
         p.write_bytes(raw)
         entries, warnings, error = load_verse_file(p, "user")  # must not raise
         assert error or entries or warnings, name
+
+
+def test_export_round_trip_keeps_user_entries_and_covers_every_day():
+    from versedesk.verses import Verse, VerseLibrary, all_date_keys, export_document, parse_entries
+
+    embedded = {k: Verse(k, f"Book {i}:1 (BSB)", f"Text {i}", "embedded") for i, k in enumerate(all_date_keys())}
+    lib = VerseLibrary(embedded, {"03-01": Verse("03-01", "내 출처", "내가 바꾼 본문", "user")})
+    data = json.loads(export_document(lib))
+    assert len(data["verses"]) == 366 and "안내" in data
+    back, warnings = parse_entries(data, "user")
+    assert warnings == [] and len(back) == 366
+    for k in all_date_keys():
+        assert (back[k].reference, back[k].text) == (lib.verse_for_key(k).reference, lib.verse_for_key(k).text)
+    assert back["03-01"].text == "내가 바꾼 본문"

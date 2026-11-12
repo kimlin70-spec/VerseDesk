@@ -24,7 +24,7 @@ from versedesk.settings import LoadResult, SettingsStore
 from versedesk.ui.icon import app_icon
 from versedesk.ui.tray import TrayController
 from versedesk.ui.verse_widget import VerseAppearance, VerseWidget
-from versedesk.verses import Verse, VerseLibrary, date_key, load_embedded, load_verse_file
+from versedesk.verses import Verse, VerseLibrary, date_key, export_document, load_embedded, load_verse_file
 from versedesk.version import version_string
 from versedesk.zone_manager import ZoneManager
 
@@ -115,6 +115,7 @@ class VerseDeskApp(QObject):
         self.tray.edit_mode_toggled.connect(self.set_edit_mode)
         self.tray.autostart_toggled.connect(self.set_autostart)
         self.tray.open_folder_requested.connect(self.open_data_folder)
+        self.tray.export_verses_requested.connect(self.export_verses)
         self.tray.quit_requested.connect(self.quit)
 
         # folder zones
@@ -379,6 +380,41 @@ class VerseDeskApp(QObject):
         self._apply_reload(self.store.update(mutate))
         if not ok:
             self.tray.notify("자동 실행", "자동 실행 설정을 바꾸지 못했습니다. log.txt를 확인해 주세요.", warning=True)
+
+    @safe
+    def export_verses(self) -> None:
+        """Write all 366 days (the user's entries where they exist, else the built-in ones) to
+        %APPDATA%\\VerseDesk\\verses.json for editing, keeping a copy of any existing file."""
+        import shutil
+
+        from versedesk.settings import atomic_write_text
+
+        path = self.user_verses_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        backup = None
+        if path.exists():
+            backup = path.with_name(f"verses.backup-{_dt.datetime.now():%Y%m%d-%H%M%S}.json")
+            shutil.copy2(path, backup)
+        atomic_write_text(path, export_document(self.library))
+        log.info("exported the verse list to %s (previous file kept as %s)", path, backup)
+        self.tray.notify(
+            "구절 목록 파일을 만들었습니다",
+            "메모장에서 원하는 날짜를 고치고 저장(Ctrl+S)하면 바로 반영됩니다."
+            + (f"\n이전 파일은 {backup.name}으로 보관했습니다." if backup else ""),
+        )
+        self._open_in_editor(path)
+
+    def _open_in_editor(self, path: Path) -> None:
+        if sys.platform == "win32":
+            import subprocess
+
+            from versedesk.win32 import shell as win_shell
+
+            win_shell.allow_foreground()
+            with win_shell.clean_launch_environment():
+                subprocess.Popen(["notepad.exe", str(path)])
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     @safe
     def open_data_folder(self) -> None:
