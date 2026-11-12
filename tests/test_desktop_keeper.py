@@ -264,3 +264,26 @@ def test_dropping_after_show_desktop_ignores_a_paused_fight_limiter(env):
     assert wm.z.index(app) < wm.z.index(0x9000)
     assert directly_above(wm, 0x9000, prog)
     layer.stop()
+
+
+def test_new_and_clicked_widgets_come_to_the_front_of_our_group(env):
+    """A zone created later (or clicked) must not hide under the older widgets; the group
+    as a whole stays directly above the desktop, below every app window."""
+    wm, d = env
+    prog = wm.explorer_24h2()
+    wm.taskbar()
+    app = wm.new("Notepad")
+    verse, zone_a, zone_b = make_widget(wm, 0x9000), make_widget(wm, 0x9100), make_widget(wm, 0x9200)
+    layer = d.Win32DesktopLayer("bottom")
+    for w in (verse, zone_a, zone_b):
+        layer.attach(w)
+    assert wm.z.index(0x9200) > wm.z.index(0x9100)  # attach alone puts the newest lowest
+    layer.bring_to_front(zone_b)
+    assert wm.z.index(0x9200) < wm.z.index(0x9100) and wm.z.index(0x9200) < wm.z.index(0x9000)
+    layer.bring_to_front(zone_a)
+    assert wm.z.index(0x9100) < wm.z.index(0x9200)
+    assert wm.z.index(app) < min(wm.z.index(h) for h in (0x9000, 0x9100, 0x9200))  # still below the app
+    layer._tick()
+    assert wm.z.index(0x9100) < wm.z.index(0x9200)  # the keeper does not undo the order
+    assert all(not topmost(wm, h) for h in (0x9000, 0x9100, 0x9200))
+    assert max(wm.z.index(h) for h in (0x9000, 0x9100, 0x9200)) < wm.z.index(prog)

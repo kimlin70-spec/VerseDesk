@@ -329,6 +329,32 @@ class Win32DesktopLayer(QObject):
         entry = self._pinned.get(id(widget))
         return bool(entry and entry.click_through)
 
+    def bring_to_front(self, widget: QWidget) -> None:
+        """Put the widget above VerseDesk's other widgets (e.g. a new or clicked zone), while
+        the group as a whole stays where it is (on the desktop, below every app window)."""
+        entry = self._pinned.get(id(widget))
+        if entry is None or not entry.hwnd or not api.IsWindow(entry.hwnd):
+            return
+        own = self._own() - {entry.hwnd}
+        highest = 0
+        w = api.h(api.GetTopWindow(None))
+        for _ in range(MAX_WALK):
+            if not w:
+                break
+            if w in own:
+                highest = w
+                break
+            w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
+        if not highest:
+            return
+        above = api.h(api.GetWindow(highest, api.GW_HWNDPREV))
+        if above == entry.hwnd:
+            return  # already directly above the others
+        if api.is_topmost(highest) != api.is_topmost(entry.hwnd):
+            return  # mid-transition (Show desktop); the next tick sorts the bands out
+        ok = api.SetWindowPos(entry.hwnd, above if above else api.HWND_TOP, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+        self._log_fix(entry, f"brought above the other widgets (after {api.describe(above) if above else 'HWND_TOP'})", ok)
+
     def start(self) -> None:
         log.info("desktop layer mode=%s\n%s", self.mode, describe_desktop(self._own()))
         self._ensure_sentinel()

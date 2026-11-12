@@ -16,7 +16,7 @@ from typing import Callable
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtGui import QImage, QPixmap
 
-from versedesk.geometry import Rect, place_on_screens
+from versedesk.geometry import Rect, best_screen, clamp_into, place_on_screens
 from versedesk.settings import LoadResult, Settings, SettingsStore
 from versedesk.ui import dialogs
 from versedesk.ui.zone_widget import TITLE_H, ItemView, ZoneWidget
@@ -110,6 +110,7 @@ class ZoneManager(QObject):
         w.collapse_toggled.connect(lambda collapsed, zid=zid: self.set_collapsed(zid, collapsed))
         w.paths_dropped.connect(lambda paths, zid=zid: self.add_items(zid, paths))
         w.geometry_edited.connect(lambda x, y, wd, ht, zid=zid: self.set_geometry(zid, x, y, wd, ht))
+        w.pressed.connect(lambda w=w: self.layer.bring_to_front(w))
         w.set_edit_mode(self._edit)
         self.layer.attach(w, click_through=False)  # zones always take clicks and drops
         self.widgets[zid] = w
@@ -137,19 +138,29 @@ class ZoneManager(QObject):
         self._position(w, z, index)
         if not w.isVisible():
             w.show()
+            self.layer.bring_to_front(w)  # a newer zone never hides under an older one
         unknown = [p for p in z.items if path_key(p) not in self._states]
         if unknown:
             self.io.check(unknown, force_icon=True)
 
     def _position(self, w: ZoneWidget, z: Zone, index: int) -> None:
         rects, prim = self._screen_rects()
-        height = TITLE_H if z.collapsed else z.height
-        if z.has_position:
-            r = place_on_screens(Rect(z.x, z.y, z.width, height), rects, prim)
-        else:
-            r = self._default_rect(z.width, z.height, index, prim)
+        r = self.shown_rect(z, rects, prim) if z.has_position else self._default_rect(z.width, z.height, index, prim)
         if (w.x(), w.y()) != (r.x, r.y):
             w.move(r.x, r.y)
+
+    @staticmethod
+    def shown_rect(z: Zone, rects: list[Rect], prim: Rect) -> Rect:
+        """Where a zone with a saved position appears. The screen is chosen by its title bar
+        (what the user placed), and the box is kept inside that screen: a zone parked
+        collapsed at the bottom of the second monitor opens upwards there instead of
+        jumping to the main monitor."""
+        bar = place_on_screens(Rect(z.x, z.y, z.width, TITLE_H), rects, prim)
+        if z.collapsed:
+            return bar
+        i, _area = best_screen(bar, rects)
+        screen = rects[i] if i >= 0 else prim
+        return clamp_into(Rect(bar.x, bar.y, z.width, z.height), screen)
 
     @staticmethod
     def _default_rect(width: int, height: int, index: int, prim: Rect) -> Rect:
@@ -158,6 +169,23 @@ class ZoneManager(QObject):
         x = prim.x + max(0, (prim.w - width) // 2) + (index % 8) * CASCADE
         y = prim.y + max(0, (prim.h - height) // 2) + (index % 8) * CASCADE
         return place_on_screens(Rect(x, y, width, height), [prim], prim)
+
+    def _free_spot(self, width: int, height: int, rects: list[Rect], prim: Rect) -> Rect:
+        """A spot on the main screen, near the middle, that no other zone covers."""
+        taken = [self.shown_rect(z, rects, prim) for z in self.zones if z.has_position]
+        cx, cy = prim.x + (prim.w - width) // 2, prim.y + (prim.h - height) // 2
+        step_x, step_y = width + 16, height + 16
+        candidates = [(cx, cy)]
+        for ring in range(1, 4):
+            for dx in range(-ring, ring + 1):
+                for dy in range(-ring, ring + 1):
+                    if max(abs(dx), abs(dy)) == ring:
+                        candidates.append((cx + dx * step_x, cy + dy * step_y))
+        for x, y in candidates:
+            r = Rect(x, y, width, height)
+            if prim.contains_rect(r) and not any(r.intersection_area(t) for t in taken):
+                return r
+        return self._default_rect(width, height, len(self.zones), prim)
 
     def reposition(self) -> None:
         """Screens changed: keep every zone on a screen (the saved positions stay as they are)."""
@@ -186,9 +214,9 @@ class ZoneManager(QObject):
         name = self._ask_name(dialogs.TITLE_NEW, "새 구역")
         if name is None:
             return
-        _rects, prim = self._screen_rects()
+        rects, prim = self._screen_rects()
         z = Zone(id=new_zone_id(zz.id for zz in self.zones), name=name)
-        r = self._default_rect(z.width, z.height, len(self.zones), prim)
+        r = self._free_spot(z.width, z.height, rects, prim)
         z.x, z.y = r.x, r.y
 
         def mutate(s: Settings) -> None:
@@ -271,7 +299,7 @@ class ZoneManager(QObject):
         if z is None:
             return
         shown_h = TITLE_H if z.collapsed else height
-        placed = place_on_screens(Rect(x, y, width, shown_h), rects, prim)
+        placed = place_on_screens(Rect(x, y, width, shown_h), rects, prim)  # what the user sees stays on a screen
 
         def mutate(s: Settings) -> None:
             zz = find_zone(s.zones, zid)

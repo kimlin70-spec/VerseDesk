@@ -7,6 +7,8 @@ The contract every widget relies on:
   * create the widget with ``layer.extra_window_flags`` OR-ed into its window flags;
   * ``attach(widget, click_through=...)`` once, after creating it and before showing it;
   * ``set_click_through(widget, on)`` when edit mode toggles;
+  * ``bring_to_front(widget)`` to put a widget above VerseDesk's other widgets (the group
+    itself stays on the desktop layer);
   * ``detach(widget)`` before deleting a widget;
   * ``start()`` / ``stop()`` around the application's lifetime.
 """
@@ -30,6 +32,7 @@ class NullDesktopLayer(QObject):
         self.mode = mode
         self.attached: dict[int, QWidget] = {}
         self.click_through: dict[int, bool] = {}
+        self.front: int | None = None
 
     @property
     def extra_window_flags(self) -> Qt.WindowType:
@@ -48,6 +51,9 @@ class NullDesktopLayer(QObject):
 
     def is_click_through(self, widget: QWidget) -> bool:
         return self.click_through.get(id(widget), False)
+
+    def bring_to_front(self, widget: QWidget) -> None:
+        self.front = id(widget)
 
     def start(self) -> None:
         pass

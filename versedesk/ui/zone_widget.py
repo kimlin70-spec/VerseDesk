@@ -111,6 +111,7 @@ class ZoneWidget(DesktopWidget):
     collapse_toggled = Signal(bool)  # the new collapsed state
     paths_dropped = Signal(list)  # list[str]
     geometry_edited = Signal(int, int, int, int)  # x, y, width, expanded height (logical px)
+    pressed = Signal()  # any mouse press: the zone comes to the front of VerseDesk's widgets
 
     def __init__(self, zone_id: str, extra_flags=Qt.WindowType.Widget):
         super().__init__(extra_flags)
@@ -230,6 +231,7 @@ class ZoneWidget(DesktopWidget):
             p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
             p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)  # icons at 125/150%
 
             box = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
             path = QPainterPath()
@@ -334,6 +336,7 @@ class ZoneWidget(DesktopWidget):
 
     def mousePressEvent(self, event):  # noqa: N802
         pos = event.position().toPoint()
+        self.pressed.emit()
         if event.button() == Qt.MouseButton.LeftButton:
             if self.collapse_button_rect().contains(pos):
                 self._press = ("collapse", event.globalPosition().toPoint(), self.geometry())

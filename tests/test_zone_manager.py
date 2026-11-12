@@ -214,3 +214,41 @@ def test_a_full_zone_says_so_instead_of_claiming_duplicates(qapp, tmp_path, monk
     assert "1개는 넣지 않았습니다" in notes[-1][1] and notes[-1][2] is True
     m.add_items(zid, ["C:\\a"])
     assert notes[-1][1] == "이미 이 구역에 들어 있는 항목입니다."
+
+
+def test_a_collapsed_zone_on_the_second_monitor_opens_there(qapp, tmp_path):
+    """Parked collapsed at the bottom of a second (150%) monitor: expanding must not move it
+    to the main monitor; the box opens upwards on the same screen."""
+    primary, second = Rect(0, 0, 1920, 1040), Rect(1920, 0, 1707, 960)
+    store = SettingsStore(tmp_path / "settings.json")
+    store.load()
+    m = ZoneManager(store, NullDesktopLayer(), notify=lambda *a, **k: None,
+                    screen_rects=lambda: ([primary, second], primary), apply_reload=lambda r: None,
+                    io=FakeIO(), ask_name=lambda t, d: "업무", confirm_delete=lambda n, c: True)
+    m.start()
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    m.set_collapsed(zid, True)
+    m.set_geometry(zid, 2400, 920, 340, 260)
+    w = m.widgets[zid]
+    assert (w.x(), w.y()) == (2400, 920)
+    m.set_collapsed(zid, False)
+    assert second.contains_rect(Rect(w.x(), w.y(), w.width(), w.height())), (w.x(), w.y())
+    assert w.x() == 2400 and w.y() == second.bottom - 260
+    m.set_collapsed(zid, True)
+    assert (w.x(), w.y()) == (2400, 920)
+
+
+def test_new_zones_do_not_cover_each_other_and_come_to_the_front(qapp, tmp_path):
+    m, store, notes = _manager(qapp, tmp_path, names=("a", "b", "c"))
+    for _ in range(3):
+        m.add_zone()
+    rects = [Rect(w.x(), w.y(), w.width(), w.height()) for w in m.widgets.values()]
+    for i in range(len(rects)):
+        for j in range(i + 1, len(rects)):
+            assert rects[i].intersection_area(rects[j]) == 0, (rects[i], rects[j])
+    last = list(m.widgets.values())[-1]
+    assert m.layer.front == id(last)
+    first = list(m.widgets.values())[0]
+    first.pressed.emit()
+    assert m.layer.front == id(first)
