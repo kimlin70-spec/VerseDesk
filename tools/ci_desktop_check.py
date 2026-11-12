@@ -165,12 +165,11 @@ def print_crop(name: str, hwnd: int, margin: int = 12) -> None:
         l, t, r, b = api.window_rect(hwnd)
         img = ImageGrab.grab(bbox=(l - margin, t - margin, r + margin, b + margin), all_screens=True)
         buf = io.BytesIO()
-        img.save(buf, "PNG", optimize=True)
+        img.convert("RGB").save(buf, "JPEG", quality=80, optimize=True)
         data = base64.b64encode(buf.getvalue()).decode()
-        print(f"BEGIN_PNG {name} {img.size[0]}x{img.size[1]}", flush=True)
-        for i in range(0, len(data), 4000):
-            print(data[i:i + 4000], flush=True)
-        print(f"END_PNG {name}", flush=True)
+        print(f"BEGIN_JPEG {name} {img.size[0]}x{img.size[1]}", flush=True)
+        print(data, flush=True)
+        print(f"END_JPEG {name}", flush=True)
     except Exception as e:
         print(f"  crop {name} failed: {e}", flush=True)
 
