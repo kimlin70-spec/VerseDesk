@@ -80,9 +80,8 @@ def _unraisablehook(unraisable) -> None:
     )
 
 
-def setup_logging(log_file: Path, crash_file: Path | None = None, level: int = logging.INFO) -> None:
+def setup_logging(log_file: Path, level: int = logging.INFO) -> None:
     """Configure the root logger. Never raises: if the log file cannot be opened we log nowhere."""
-    global _crash_file
 
     if sys.stdout is None:
         sys.stdout = _NullStream()
@@ -108,13 +107,21 @@ def setup_logging(log_file: Path, crash_file: Path | None = None, level: int = l
     threading.excepthook = _thread_excepthook
     sys.unraisablehook = _unraisablehook
 
-    if crash_file is not None:
-        _adopt_previous_crash(crash_file)
-        try:
-            _crash_file = open(crash_file, "w", encoding="utf-8")
-            faulthandler.enable(file=_crash_file, all_threads=True)
-        except OSError:
-            _crash_file = None
+
+def enable_crash_report(crash_file: Path) -> None:
+    """Record native crashes (faulthandler) in crash.txt.
+
+    Call only after the single-instance check: a second copy of the app must not touch
+    the running instance's file.  A clean exit clears the file (shutdown_logging), so
+    anything found here at the next start comes from an abnormal end.
+    """
+    global _crash_file
+    _adopt_previous_crash(crash_file)
+    try:
+        _crash_file = open(crash_file, "w", encoding="utf-8")
+        faulthandler.enable(file=_crash_file, all_threads=True)
+    except OSError:
+        _crash_file = None
 
 
 def _adopt_previous_crash(crash_file: Path) -> None:
@@ -130,7 +137,7 @@ def _adopt_previous_crash(crash_file: Path) -> None:
         pass
 
 
-def shutdown_logging() -> None:
+def shutdown_logging(clean_exit: bool = False) -> None:
     global _crash_file
     try:
         faulthandler.disable()
@@ -138,8 +145,11 @@ def shutdown_logging() -> None:
         pass
     if _crash_file is not None:
         try:
+            if clean_exit:
+                _crash_file.seek(0)
+                _crash_file.truncate()
             _crash_file.close()
-        except OSError:
+        except (OSError, ValueError):
             pass
         _crash_file = None
     logging.shutdown()

@@ -43,9 +43,15 @@ def main(argv: list[str] | None = None) -> int:
             print(version_string())
         return 0
 
-    from versedesk.logging_setup import install_qt_message_handler, setup_logging, shutdown_logging
+    from versedesk.logging_setup import (
+        enable_crash_report,
+        install_qt_message_handler,
+        setup_logging,
+        shutdown_logging,
+    )
 
-    setup_logging(paths.log_path(), paths.crash_path())
+    setup_logging(paths.log_path())
+    clean_exit = False
     try:
         _log_startup()
         from versedesk.single_instance import SingleInstance, show_already_running_message
@@ -56,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
             if not args.no_duplicate_dialog:
                 show_already_running_message()
             return EXIT_ALREADY_RUNNING
+        enable_crash_report(paths.crash_path())
 
         from PySide6 import __version__ as pyside_version
         from PySide6.QtCore import QTimer, qVersion
@@ -82,9 +89,10 @@ def main(argv: list[str] | None = None) -> int:
         code = qapp.exec()
         log.info("event loop finished (code %s)", code)
         instance.release()
+        clean_exit = True
         return int(code)
     except Exception:
         log.exception("fatal error during startup")
         return 1
     finally:
-        shutdown_logging()
+        shutdown_logging(clean_exit=clean_exit)

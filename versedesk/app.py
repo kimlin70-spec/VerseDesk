@@ -130,6 +130,7 @@ class VerseDeskApp(QObject):
 
     def start(self) -> None:
         log.info("starting VerseDesk %s", version_string())
+        self.tray.show()  # first, so notifications raised during startup are not dropped
         self._load_user_verses(initial=True)
         self._show_verse_for(self._today())
 
@@ -142,7 +143,6 @@ class VerseDeskApp(QObject):
         self.layer.attach(self.verse_widget, click_through=True)
         self.verse_widget.show()
         self.layer.start()
-        self.tray.show()
 
         self.day_watch.start()
         self._poll.start()

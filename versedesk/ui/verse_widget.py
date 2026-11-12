@@ -158,7 +158,10 @@ class VerseWidget(DesktopWidget):
         if self._text:
             br = fm.boundingRect(QRectF(0, 0, inner_w, 100_000), self._flags(), self._text)
             text_h = br.height()
-        ref_h = QFontMetricsF(ref_font, self).height() if self._reference else 0.0
+        ref_h = 0.0
+        if self._reference:
+            ref_br = QFontMetricsF(ref_font, self).boundingRect(QRectF(0, 0, inner_w, 100_000), self._flags(), self._reference)
+            ref_h = ref_br.height()
         gap = fm.height() * 0.35 if (self._text and self._reference) else 0.0
         self._text_rect = QRectF(PADDING, PADDING, inner_w, text_h)
         self._ref_rect = QRectF(PADDING, PADDING + text_h + gap, inner_w, ref_h)

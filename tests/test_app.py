@@ -196,3 +196,27 @@ def test_tray_menu_items(qapp, home, embedded):
         assert app.edit_mode is True and "끄기" in app.tray.act_edit.text()
     finally:
         shutdown(app)
+
+
+def test_broken_user_verses_at_startup_is_notified_with_the_tray_visible(qapp, home, embedded):
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "verses.json").write_text("{ not json", encoding="utf-8")
+    from versedesk.ui.tray import TrayController
+
+    seen = []
+    original = TrayController.notify
+
+    def spy(self, title, message, warning=False, msecs=8000):
+        seen.append((title, self.tray.isVisible()))
+        return original(self, title, message, warning, msecs)
+
+    TrayController.notify = spy
+    try:
+        app, _ = make_app(qapp, home, embedded, dt.date(2026, 4, 4))
+    finally:
+        TrayController.notify = original
+    try:
+        errors = [s for s in seen if "verses.json" in s[0]]
+        assert errors and all(visible for _title, visible in errors)
+    finally:
+        shutdown(app)
