@@ -11,6 +11,7 @@ from versedesk.desktop_layer import NullDesktopLayer
 from versedesk.geometry import Rect
 from versedesk.settings import SettingsStore
 from versedesk.ui.zone_widget import TITLE_H
+from versedesk.zone_io import MISSING
 from versedesk.zone_manager import ZoneManager
 
 
@@ -38,6 +39,9 @@ class FakeIO(QObject):
             self.state_ready.emit(p, os.path.exists(p), os.path.isdir(p), self.names.get(p, ""), QImage())
 
     def open(self, path):
+        if not os.path.exists(path):  # the real worker checks the path again before opening
+            self.open_finished.emit(path, MISSING)
+            return
         self.opened.append(path)
         self.open_finished.emit(path, self.open_error)
 
@@ -266,3 +270,41 @@ def test_items_show_the_name_explorer_shows(qapp, tmp_path, originals):
     m.add_items(zid, [str(folder), str(f)])
     assert [i.name for i in m.widgets[zid].items] == ["보고서", "계획"]
     assert _saved(tmp_path)[0]["items"] == [str(folder), str(f)]  # the stored paths are untouched
+
+
+def test_an_item_that_came_back_opens_even_if_it_was_shown_as_missing(qapp, tmp_path, originals):
+    """E.g. a network drive or USB disk connected after the last check: double-click opens it
+    (the worker checks again) and the item is no longer faded."""
+    folder, f = originals
+    io = FakeIO()
+    m, store, notes = _manager(qapp, tmp_path, io=io)
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    m.add_items(zid, [str(f)])
+    content = f.read_text(encoding="utf-8")
+    os.remove(f)
+    m._recheck_all()
+    assert [i.exists for i in m.widgets[zid].items] == [False]
+    f.write_text(content, encoding="utf-8")  # it is back before the next 30 s re-check
+    m.open_item(zid, str(f))
+    assert io.opened == [str(f)]
+    assert [i.exists for i in m.widgets[zid].items] == [True]
+
+
+def test_a_zone_removed_while_a_menu_or_dialog_is_open_is_deleted_only_afterwards(qapp, tmp_path, monkeypatch):
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
+
+    m, store, notes = _manager(qapp, tmp_path)
+    m.add_zone()
+    zid = store.settings.zones[0].id
+    w = m.widgets[zid]
+    monkeypatch.setattr(QApplication, "activeModalWidget", staticmethod(lambda: object()))
+    m._destroy(zid)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert shiboken6.isValid(w) and not w.isVisible()  # still alive while the dialog runs
+    monkeypatch.setattr(QApplication, "activeModalWidget", staticmethod(lambda: None))
+    m._flush_doomed()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not shiboken6.isValid(w)

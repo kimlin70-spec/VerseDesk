@@ -15,12 +15,13 @@ from typing import Callable
 
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import QApplication
 
 from versedesk.geometry import Rect, best_screen, clamp_into, place_on_screens
 from versedesk.settings import LoadResult, Settings, SettingsStore
 from versedesk.ui import dialogs
 from versedesk.ui.zone_widget import TITLE_H, ItemView, ZoneWidget
-from versedesk.zone_io import ZoneIO
+from versedesk.zone_io import MISSING, ZoneIO
 from versedesk.zones import MAX_ITEMS, MAX_ZONES, AddResult, Zone, display_name, find_zone, new_zone_id, path_key
 
 log = logging.getLogger("versedesk.zones")
@@ -61,6 +62,7 @@ class ZoneManager(QObject):
         self.io.state_ready.connect(self._on_state)
         self.io.open_finished.connect(self._on_open_finished)
         self.widgets: dict[str, ZoneWidget] = {}
+        self._doomed: list[ZoneWidget] = []
         self._states: dict[str, tuple[bool, bool, QPixmap | None, str]] = {}  # key -> exists, is_dir, icon, name
         self._edit = False
         self._started = False
@@ -124,8 +126,22 @@ class ZoneManager(QObject):
             return
         self.layer.detach(w)
         w.hide()
-        w.deleteLater()
+        self._doomed.append(w)
+        self._flush_doomed()
         log.info("zone %s window removed", zid)
+
+    def _flush_doomed(self) -> None:
+        """Delete removed zone windows, but never while a menu or dialog runs its own event
+        loop: the window may be the one whose menu is open (deleting it there would free it
+        under Qt's feet).  Retried shortly until it is safe."""
+        if not self._doomed:
+            return
+        if QApplication.activePopupWidget() is not None or QApplication.activeModalWidget() is not None:
+            QTimer.singleShot(500, self._flush_doomed)
+            return
+        doomed, self._doomed = self._doomed, []
+        for w in doomed:
+            w.deleteLater()
 
     def _apply(self, w: ZoneWidget, z: Zone, index: int) -> None:
         views = []
@@ -312,11 +328,8 @@ class ZoneManager(QObject):
         log.info("zone %s moved/resized to (%d, %d) %dx%d", zid, placed.x, placed.y, width, height)
 
     def open_item(self, zid: str, path: str) -> None:
-        state = self._states.get(path_key(path))
-        if state is not None and state[0] is False:
-            self._notify("찾을 수 없습니다", f"{path}\n원래 자리에서 옮겨졌거나 삭제된 것 같습니다.", warning=True)
-            self.io.check([path])
-            return
+        # Always ask the worker: it checks the path again first (a network drive or USB disk
+        # may have come back since the last check) and only then opens it.
         log.info("opening %s", path)
         self.io.open(path)
 
@@ -334,10 +347,18 @@ class ZoneManager(QObject):
                     w.set_item_state(item.path, exists, is_dir, pixmap, name)
 
     def _on_open_finished(self, path: str, error: str) -> None:
-        if error:
+        if error == MISSING:
+            log.info("cannot open %s: it does not exist (any more)", path)
+            self._notify("찾을 수 없습니다", f"{path}\n원래 자리에서 옮겨졌거나 삭제된 것 같습니다.", warning=True)
+            self.io.check([path])
+        elif error:
             log.warning("could not open %s: %s", path, error)
             self._notify("열 수 없습니다", f"{path}\n{error}", warning=True)
             self.io.check([path])
+        else:
+            state = self._states.get(path_key(path))
+            if state is not None and state[0] is False:
+                self.io.check([path], force_icon=True)  # it is back: no longer faded
 
     def _recheck_all(self) -> None:
         paths = [p for z in self.zones for p in z.items]

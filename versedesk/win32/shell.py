@@ -163,13 +163,24 @@ GetDIBits = _proto(
 DeleteObject = _proto(gdi32.DeleteObject, wintypes.BOOL, wintypes.HANDLE)
 SetDllDirectoryW = _proto(kernel32.SetDllDirectoryW, wintypes.BOOL, wintypes.LPCWSTR)
 CoInitializeEx = _proto(ole32.CoInitializeEx, ctypes.c_long, ctypes.c_void_p, wintypes.DWORD)
+SetThreadErrorMode = _proto(kernel32.SetThreadErrorMode, wintypes.BOOL, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD))
+SEM_FAILCRITICALERRORS = 0x0001
+SEM_NOOPENFILEERRORBOX = 0x8000
 CoUninitialize = _proto(ole32.CoUninitialize, None)
 
 
 # --- COM per worker thread -------------------------------------------------------------
 
 def init_thread_com() -> bool:
-    """Call once at the start of a worker thread. Returns True if CoUninitialize is due."""
+    """Call once at the start of a worker thread. Returns True if CoUninitialize is due.
+
+    Also turns off Windows' hard-error boxes for this thread: checking a path on a card
+    reader or DVD drive without media would otherwise pop up "There is no disk in the
+    drive" (and again at every re-check) instead of quietly reporting it missing."""
+    try:
+        SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, None)
+    except Exception:
+        log.exception("SetThreadErrorMode failed")
     hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)
     return hr >= 0  # S_OK or S_FALSE (already initialised); RPC_E_CHANGED_MODE is negative
 

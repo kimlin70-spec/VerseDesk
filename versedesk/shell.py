@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import ntpath
 import os
+import stat
 import subprocess
 import sys
 
@@ -19,13 +20,12 @@ IS_WINDOWS = sys.platform == "win32"
 
 
 def probe(path: str) -> tuple[bool, bool]:
-    """(exists, is_dir). Never raises."""
+    """(exists, is_dir) with a single file-system call. Never raises."""
     try:
-        if os.path.isdir(path):
-            return True, True
-        return os.path.exists(path), False
+        st = os.stat(path)
     except (OSError, ValueError):
         return False, False
+    return True, stat.S_ISDIR(st.st_mode)
 
 
 def guess_is_dir(path: str) -> bool:

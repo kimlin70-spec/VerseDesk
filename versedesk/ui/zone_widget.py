@@ -26,6 +26,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import shiboken6
+
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QToolTip
@@ -437,6 +439,8 @@ class ZoneWidget(DesktopWidget):
             menu.addSeparator()
             menu.addAction(act_delete)
             chosen = menu.exec(event.globalPos())
+            if not shiboken6.isValid(self):
+                return  # this zone was removed while its menu was open
             if chosen is act_rename:
                 self.rename_requested.emit()
             elif chosen is act_delete:
@@ -447,7 +451,8 @@ class ZoneWidget(DesktopWidget):
             path = self._items[i].path
             act_remove = QAction(TEXT_REMOVE_ITEM, menu)
             menu.addAction(act_remove)
-            if menu.exec(event.globalPos()) is act_remove:
+            chosen = menu.exec(event.globalPos())
+            if shiboken6.isValid(self) and chosen is act_remove:
                 self.remove_requested.emit(path)
 
     # ------------------------------------------------------------------ drag and drop (link only)

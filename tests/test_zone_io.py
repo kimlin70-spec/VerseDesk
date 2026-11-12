@@ -7,7 +7,7 @@ import time
 import pytest
 from PySide6.QtCore import QCoreApplication
 
-from versedesk.zone_io import ZoneIO, bgra_to_qimage
+from versedesk.zone_io import MISSING, ZoneIO, bgra_to_qimage
 
 
 def _wait(predicate, timeout=5.0):
@@ -25,6 +25,7 @@ def test_worker_reports_states_and_opens_off_the_gui_thread(qapp, tmp_path):
 
     f = tmp_path / "a.txt"
     f.write_text("x", encoding="utf-8")
+    (tmp_path / "bad").write_text("x", encoding="utf-8")
     threads, opened = set(), []
 
     def probe(path):
@@ -44,10 +45,12 @@ def test_worker_reports_states_and_opens_off_the_gui_thread(qapp, tmp_path):
     io.check([str(f), str(tmp_path / "missing")], force_icon=True)
     io.open(str(f))
     io.open(str(tmp_path / "bad"))
-    assert _wait(lambda: len(states) == 2 and len(finished) == 2)
+    io.open(str(tmp_path / "missing"))  # checked again before opening: never handed to Windows
+    assert _wait(lambda: len(states) == 2 and len(finished) == 3)
     assert (str(f), True, False, 1) in states
     assert (str(tmp_path / "missing"), False, True, 1) in states  # no extension: shown as a folder
-    assert finished == [(str(f), ""), (str(tmp_path / "bad"), "boom")]
+    assert finished == [(str(f), ""), (str(tmp_path / "bad"), "boom"), (str(tmp_path / "missing"), MISSING)]
+    assert str(tmp_path / "missing") not in opened
     assert threads == {"zone-probe", "zone-open"}
     assert set(names) == {"이름"}
     # unchanged state: no new report unless an icon is asked for

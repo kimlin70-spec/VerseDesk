@@ -22,6 +22,7 @@ from versedesk.zones import path_key
 log = logging.getLogger("versedesk.zone_io")
 
 _STOP = object()
+MISSING = "\x00missing"  # open_finished error value: the path does not exist (checked just now)
 
 
 def bgra_to_qimage(data: tuple[int, int, bytes] | None) -> QImage:
@@ -122,7 +123,8 @@ class ZoneIO(QObject):
                 if path is _STOP:
                     return
                 try:
-                    error = self._opener(path)
+                    exists, _is_dir = self._probe(path)  # fresh: a stored state can be stale
+                    error = self._opener(path) if exists else MISSING
                 except Exception as e:  # the opener should not raise; belt and braces
                     log.exception("opening %s failed", path)
                     error = str(e) or e.__class__.__name__
