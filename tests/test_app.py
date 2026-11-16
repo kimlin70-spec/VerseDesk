@@ -628,6 +628,17 @@ def test_unticking_the_explorer_slot_also_ends_the_edit_mode_it_switched_on(qapp
         app.tray.edit_mode_toggled.emit(True)
         app.tray.explorer_slot_toggled.emit(False)
         assert app.edit_mode is True and app.layer.is_click_through(app.verse_widget) is False
+        app.tray.edit_mode_toggled.emit(False)
+
+        # The item switched off behind the app's back (settings.json edited) and ticked again: the
+        # 배치 편집 of the first tick is still the app's own, so the next untick ends it.
+        app.tray.explorer_slot_toggled.emit(True)
+        assert app.edit_mode is True
+        app.store.update(lambda s: setattr(s.explorer_window, "enabled", False))
+        app.explorer.sync_from_settings()
+        app.tray.explorer_slot_toggled.emit(True)
+        app.tray.explorer_slot_toggled.emit(False)
+        assert app.edit_mode is False
     finally:
         shutdown(app)
 

@@ -123,7 +123,8 @@ class SlotFrame(QWidget):
             delta = cursor - start
             if kind == "move":  # wholly on the monitor under the mouse: the size it had when grabbed, or what fits
                 area = self._area(QGuiApplication.screenAt(cursor) or self.screen())
-                target = QRect(geo.topLeft() + delta, geo.size().boundedTo(area.size()))
+                size = geo.size().boundedTo(area.size()).expandedTo(self.minimumSize())  # (what the widget can be)
+                target = QRect(geo.topLeft() + delta, size)
                 target.moveLeft(max(area.left(), min(target.left(), area.right() + 1 - target.width())))
                 target.moveTop(max(area.top(), min(target.top(), area.bottom() + 1 - target.height())))
                 self.setGeometry(target)

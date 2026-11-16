@@ -617,7 +617,7 @@ class VerseDeskApp(QObject):
         self.tray.set_explorer_slot_checked(self.store.settings.explorer_window.enabled)
         log.info("explorer window slot switched %s", "on" if on else "off")
         if choose_place:
-            by_us = not self.edit_mode
+            by_us = not self.edit_mode or self._edit_for_slot
             self.set_edit_mode(True)  # the frame appears, so the place can be chosen right away
             self._edit_for_slot = by_us
             self.tray.notify(
@@ -626,7 +626,8 @@ class VerseDeskApp(QObject):
                 "크기를 정한 뒤, 트레이 메뉴에서 '배치 편집 끄기'를 누르세요.",
             )
         elif on:
-            self.tray.notify("탐색기 창 자리 고정", "새로 여는 탐색기 창이 정해 둔 자리에 열립니다. 자리를 바꾸려면 '배치 편집'을 켜세요.")
+            self.tray.notify("탐색기 창 자리 고정",
+                             "새로 여는 탐색기 창이 정해 둔 자리에 열립니다. 자리는 '배치 편집' 중에 파란 틀을 끌어서 바꿀 수 있습니다.")
         elif undo_edit:
             self.set_edit_mode(False)  # otherwise the verse would keep catching clicks with nothing left to show why
 

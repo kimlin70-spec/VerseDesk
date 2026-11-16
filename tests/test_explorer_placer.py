@@ -284,6 +284,24 @@ def test_a_maximised_window_of_a_slow_explorer_is_still_placed(qapp, home, fast)
     placer.stop()
 
 
+def test_a_window_minimised_right_after_it_was_moved_is_not_placed_again(qapp, home, fast):
+    """Only a window that has not been moved yet is waited for while it is minimised."""
+    placer, w, _ = make(home)
+    w.responsive = False
+    win = w.open(0x905)  # the move is asked for...
+    w.responsive = True
+    w.pump(0x905)  # ...carried out...
+    win.minimized = True  # ...and the window is minimised before the app looks again
+    settle(500)  # (longer than the app waits for a window that is not on screen)
+    assert 0x905 in placer._seen and not placer._jobs  # it has had its turn
+    win.minimized = False
+    win.rect = (10, 10, 600, 500)  # brought up and moved by the user
+    w.activate(0x905)
+    settle()
+    assert win.rect == (10, 10, 600, 500) and win.moves == 1
+    placer.stop()
+
+
 def test_a_maximised_window_that_opens_during_a_held_click_is_still_placed(qapp, home, fast):
     """The second click of the double-click is still down when the window appears maximised. The
     app's own restore changes the window's rectangle: that must not be taken for a drag."""
