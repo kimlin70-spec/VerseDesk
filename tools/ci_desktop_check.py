@@ -1121,7 +1121,9 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
 
         # (3) A window that does not respond for a while (busy or hung Explorer), from the moment
         #     it appears: the app's request to move it has to wait, the app itself must not -
-        #     another window opened meanwhile is placed at once.
+        #     another window opened meanwhile is placed at once. (That other window is a stand-in
+        #     too: a real Explorer window may open in the slot by itself, from its own memory -
+        #     it did in run 34 - and then nothing would show that the app moved anything.)
         before_log = len(slot_log(appdata))
         slow, slow_hwnd = start_stand_in("slow", delay=4)
         helpers.append(slow)
@@ -1131,10 +1133,15 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
             expect("explorer slot: ...so the request to move it is still waiting",
                    not near(seen_rect(slow_hwnd), rect1), f"window at {seen_rect(slow_hwnd)}, slot {rect1}", warn_only=True)
             expect("explorer slot: VerseDesk keeps responding while an Explorer window is stuck", responds(verse))
-            w6 = open_folder(folders[6])
-            opened.append(w6)
-            expect_placed("explorer slot: ...and another window opened meanwhile is still placed", w6, rect1)
-            close_windows([w6])
+            other, other_hwnd = start_stand_in("plain", delay=0, rect="520,330,400,300")
+            helpers.append(other)
+            moved = bool(other_hwnd) and wait_for(lambda: near(seen_rect(other_hwnd), rect1), timeout=10, step=0.05)
+            still_stuck = not responds(slow_hwnd, 200)
+            expect("explorer slot: ...and another window opened meanwhile is still placed", bool(moved),
+                   f"slot {rect1}, visible frame {seen_rect(other_hwnd) if other_hwnd else None}")
+            expect("explorer slot: ...while the first one was still stuck", still_stuck, warn_only=True)
+            if other_hwnd:
+                user32.PostMessageW(other_hwnd, 0x0010, 0, 0)
             wait_line(slow, "AWAKE", 20)
             expect_placed("explorer slot: the slow window is placed once it responds again", slow_hwnd, rect1)
             expect("explorer slot: ...by the request that had been waiting (log)",
