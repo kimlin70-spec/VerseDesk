@@ -604,6 +604,34 @@ def test_explorer_slot_is_off_until_switched_on_and_then_shows_its_frame(qapp, h
         shutdown(app)
 
 
+def test_unticking_the_explorer_slot_also_ends_the_edit_mode_it_switched_on(qapp, home, embedded):
+    """The first tick switches 배치 편집 on by itself (to show the frame). Unticking the item again
+    must end that too: otherwise the verse keeps catching clicks, with no frame left to say why.
+    A 배치 편집 the user switched on themselves is never ended this way."""
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        app.tray.explorer_slot_toggled.emit(True)
+        assert app.edit_mode is True and app.explorer._frame.isVisible()
+        app.tray.explorer_slot_toggled.emit(False)  # the user changes their mind
+        assert app.edit_mode is False and not app.explorer._frame.isVisible()
+        assert app.layer.is_click_through(app.verse_widget) is True and "켜기" in app.tray.act_edit.text()
+
+        app.tray.edit_mode_toggled.emit(True)  # the user's own 배치 편집, switched on before the tick...
+        app.tray.explorer_slot_toggled.emit(True)
+        app.tray.explorer_slot_toggled.emit(False)
+        assert app.edit_mode is True
+        app.tray.edit_mode_toggled.emit(False)
+
+        app.tray.explorer_slot_toggled.emit(True)  # ...or switched off and on again by them after the tick
+        assert app.edit_mode is True
+        app.tray.edit_mode_toggled.emit(False)
+        app.tray.edit_mode_toggled.emit(True)
+        app.tray.explorer_slot_toggled.emit(False)
+        assert app.edit_mode is True and app.layer.is_click_through(app.verse_widget) is False
+    finally:
+        shutdown(app)
+
+
 def test_explorer_slot_places_a_new_window_through_the_whole_app(qapp, home, embedded, monkeypatch):
     """The app's own screen information feeds the conversion (no Windows needed for that)."""
     import versedesk.app as app_module

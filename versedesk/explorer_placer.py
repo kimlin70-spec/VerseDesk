@@ -11,7 +11,8 @@ Rules (kept deliberately narrow):
   * only Explorer windows that come on screen after the feature was switched on are placed,
     each once - windows that were already open, and windows the user moves afterwards, are
     left alone;
-  * a window is placed when it is really on screen (visible, not cloaked), never earlier;
+  * a window is placed when it is really on screen (visible, not cloaked, not minimised),
+    never earlier;
   * nothing is moved while the mouse button is held: a double-click that is still held is
     waited for, a window that was dragged meanwhile (a tab pulled out of another window)
     stays where the user dropped it, and once the user grabs something the app lets go;
@@ -273,29 +274,32 @@ class ExplorerPlacer(QObject):
         w = self._watcher
         if not self._watching or not w.exists(hwnd):
             return True
-        if not w.is_visible(hwnd) or w.is_cloaked(hwnd):
+        if not w.is_visible(hwnd) or w.is_cloaked(hwnd) or (not job.moves and w.is_minimized(hwnd)):
             # Not on screen (yet): it is not placed now, and it does not count as handled, so
             # that it is placed when it really appears (reported again, or activated).
             job.hidden_checks += 1
             if job.hidden_checks > MAX_HIDDEN_CHECKS:
                 self._seen.discard(hwnd)
-                log.info("explorer window is not on screen yet (hidden or cloaked); it will be placed when it shows: %s",
-                         w.describe(hwnd))
+                log.info("explorer window is not on screen yet (hidden, cloaked or minimised); "
+                         "it will be placed when it shows: %s", w.describe(hwnd))
                 return True
             self._later(hwnd, CHECK_MS)
             return False
         if w.is_minimized(hwnd):
-            return True
+            return True  # minimised after it was moved: it has had its turn
         if w.mouse_button_down():
-            if job.moves:
-                return True  # the user has taken hold of something: hands off from now on
+            if job.moves:  # the user has taken hold of something: hands off from now on
+                if not job.in_slot:  # (otherwise "placed in the slot" is already in the log)
+                    log.info("explorer window: mouse button down after %d move(s), before the result could be checked; "
+                             "left as it is: %s", job.moves, w.describe(hwnd))
+                return True
             job.mouse_waits += 1
             if job.mouse_waits > MAX_MOUSE_WAITS:
                 return True
             self._later(hwnd, MOUSE_WAIT_MS)
             return False
         window = w.window_rect(hwnd)
-        if job.mouse_waits and not job.moves and window != job.first_rect:
+        if job.mouse_waits and not job.moves and not job.restore_asked and window != job.first_rect:
             log.info("explorer window was dragged while it opened; left where the user put it: %s", w.describe(hwnd))
             return True
         target = self.native_target()

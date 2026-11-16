@@ -41,7 +41,9 @@ def to_native(lx, ly):
     raise ValueError((lx, ly))
 
 
-def drag(start_rect, grab, native_delta, steps=80):
+def drag(start_rect, grab, native_delta, steps=80, then=None):
+    """Grab the frame at ``grab`` and carry it by ``native_delta``; with ``then``, carry it on to
+    that offset from the start (e.g. back again) before the button is released."""
     frame = SlotFrame()
     saved = []
     frame.geometry_edited.connect(lambda *a: saved.append(list(a)))
@@ -58,8 +60,11 @@ def drag(start_rect, grab, native_delta, steps=80):
     frame.mousePressEvent(event(QEvent.Type.MouseButtonPress, nx0, ny0, left, left))
     sizes, outside, hops, last = set(), 0, 0, frame.screen().name()
     nx, ny = nx0, ny0
-    for i in range(1, steps + 1):
-        nx, ny = nx0 + native_delta[0] * i / steps, ny0 + native_delta[1] * i / steps
+    path = [(nx0 + native_delta[0] * i / steps, ny0 + native_delta[1] * i / steps) for i in range(1, steps + 1)]
+    if then is not None:
+        (ax, ay), (bx, by) = path[-1], (nx0 + then[0], ny0 + then[1])
+        path += [(ax + (bx - ax) * i / steps, ay + (by - ay) * i / steps) for i in range(1, steps + 1)]
+    for nx, ny in path:
         frame.mouseMoveEvent(event(QEvent.Type.MouseMove, nx, ny, Qt.MouseButton.NoButton, left))
         app.processEvents()
         g = frame.geometry()
@@ -89,5 +94,9 @@ out = {
     "move_back": drag((2400, 200, 600, 400), (300, 20), (-2000, 0)),
     # the resize corner pulled across the boundary
     "resize_across": drag((700, 100, 500, 400), (495, 395), (1500, 300)),
+    # a frame larger than the 150 % monitor (1280x720 logical) carried onto it from the 100 % one...
+    "oversize_to_small": drag((2000, 50, 1500, 900), (300, 20), (-1500, 0)),
+    # ...and carried there and back again in one go (dropped 40, 30 from where it was grabbed)
+    "oversize_there_and_back": drag((2000, 50, 1500, 900), (300, 20), (-1500, 0), then=(40, 30)),
 }
 print(json.dumps(out))

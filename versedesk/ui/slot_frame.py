@@ -7,8 +7,9 @@ desktop layer and never takes the keyboard focus.
 
 Monitors with different scaling: Qt's logical coordinates have gaps between such monitors,
 and a window that straddles two of them changes its logical size.  So while it is dragged
-the frame always lies wholly on the monitor under the mouse and keeps the size it had when
-it was grabbed; while it is resized it never grows past its own monitor.
+the frame always lies wholly on the monitor under the mouse, with the size it had when it
+was grabbed (or, on a monitor too small for that, as much of it as fits there); while it is
+resized it never grows past its own monitor.
 
 The widget only reports what the user did (``geometry_edited``); ``ExplorerPlacer``
 saves it.
@@ -16,7 +17,7 @@ saves it.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen, QPolygon
 from PySide6.QtWidgets import QWidget
 
@@ -52,6 +53,7 @@ class SlotFrame(QWidget):
         self.setMouseTracking(True)
         self.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
         self._press: tuple[str, object, QRect] | None = None
+        self._asked: QSize | None = None  # the size last asked for while it is being moved
 
     def grip_rect(self) -> QRect:
         return QRect(self.width() - GRIP, self.height() - GRIP, GRIP, GRIP)
@@ -111,6 +113,7 @@ class SlotFrame(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             kind = "resize" if self.grip_rect().contains(event.position().toPoint()) else "move"
             self._press = (kind, event.globalPosition().toPoint(), self.geometry())
+            self._asked = None
         event.accept()
 
     def mouseMoveEvent(self, event):  # noqa: N802
@@ -118,12 +121,13 @@ class SlotFrame(QWidget):
             kind, start, geo = self._press
             cursor = event.globalPosition().toPoint()
             delta = cursor - start
-            if kind == "move":  # the size it had when grabbed, wholly on the monitor under the mouse
+            if kind == "move":  # wholly on the monitor under the mouse: the size it had when grabbed, or what fits
                 area = self._area(QGuiApplication.screenAt(cursor) or self.screen())
-                target = QRect(geo.topLeft() + delta, geo.size())
+                target = QRect(geo.topLeft() + delta, geo.size().boundedTo(area.size()))
                 target.moveLeft(max(area.left(), min(target.left(), area.right() + 1 - target.width())))
                 target.moveTop(max(area.top(), min(target.top(), area.bottom() + 1 - target.height())))
                 self.setGeometry(target)
+                self._asked = target.size()
             else:  # never larger than what fits on its own monitor
                 area = self._area(self.screen())
                 self.resize(max(MIN_WIDTH, min(geo.width() + delta.x(), area.right() + 1 - geo.x())),
@@ -139,7 +143,9 @@ class SlotFrame(QWidget):
             kind, _start, geo = self._press
             self._press = None
             if self.geometry() != geo:
-                # a move never changes the size, whatever the monitors did to the numbers on the way
-                w, h = (geo.width(), geo.height()) if kind == "move" else (self.width(), self.height())
-                self.geometry_edited.emit(self.x(), self.y(), w, h)
+                # a move saves the size it asked for, whatever the monitors did to the numbers on the way
+                size = self.size()
+                if kind == "move":
+                    size = self._asked if self._asked is not None else geo.size()
+                self.geometry_edited.emit(self.x(), self.y(), size.width(), size.height())
         event.accept()

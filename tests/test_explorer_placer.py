@@ -202,6 +202,7 @@ def test_windows_that_were_already_open_are_left_alone(qapp, home, fast):
     old = w.open(0x300)  # open before the feature starts
     placer, w, _ = make(home, watcher=w)
     w.callback(0x300, True)  # even if Windows reports it again (e.g. after a virtual desktop switch)
+    w.activate(0x300)  # ...or the user clicks it
     settle()
     assert old.moves == 0
     new = w.open(0x301)
@@ -280,6 +281,35 @@ def test_a_maximised_window_of_a_slow_explorer_is_still_placed(qapp, home, fast)
     w.pump(0x801)
     settle()
     assert not win.maximized and w.visible_rect(0x801) == TARGET
+    placer.stop()
+
+
+def test_a_maximised_window_that_opens_during_a_held_click_is_still_placed(qapp, home, fast):
+    """The second click of the double-click is still down when the window appears maximised. The
+    app's own restore changes the window's rectangle: that must not be taken for a drag."""
+    placer, w, _ = make(home)
+    w.button_down = True
+    win = w.open(0x802, rect=(-7, -7, 1927, 1047), maximized=True)
+    settle(40)
+    assert win.restores == 0 and win.moves == 0 and win.maximized  # nothing while the button is held
+    w.button_down = False
+    settle()
+    assert win.restores == 1 and w.visible_rect(0x802) == TARGET and placer.placed == 1
+    placer.stop()
+
+
+def test_a_click_while_a_maximised_window_is_being_restored_does_not_end_the_placing(qapp, home, fast):
+    placer, w, _ = make(home)
+    w.responsive = False
+    win = w.open(0x803, rect=(-7, -7, 1927, 1047), maximized=True)  # the restore is asked for...
+    w.button_down = True  # ...and the user clicks somewhere before Explorer has carried it out
+    settle(30)
+    w.responsive = True
+    w.pump(0x803)
+    assert win.restores == 1 and win.moves == 0
+    w.button_down = False
+    settle()
+    assert w.visible_rect(0x803) == TARGET and win.moves == 1
     placer.stop()
 
 
@@ -395,6 +425,48 @@ def test_a_minimised_window_is_left_alone(qapp, home, fast):
     placer.stop()
 
 
+def test_a_window_that_opens_minimised_is_placed_when_it_is_brought_up(qapp, home, fast):
+    """Like a window that is still hidden: it has not been on screen yet, so it is not used up."""
+    placer, w, _ = make(home)
+    soon = w.open(0x901, minimized=True)
+    settle(30)
+    soon.minimized = False  # brought up within the waiting time: placed without another notification
+    settle()
+    assert w.visible_rect(0x901) == TARGET and soon.moves == 1
+
+    late = w.open(0x902, minimized=True)
+    settle(500)  # longer than the waiting time
+    assert late.moves == 0 and 0x902 not in placer._seen and not placer._jobs
+    late.minimized = False
+    w.activate(0x902)  # the user clicks its taskbar button: Windows reports the activation
+    settle()
+    assert w.visible_rect(0x902) == TARGET and late.moves == 1
+    placer.stop()
+
+
+def test_minimising_never_makes_a_window_the_users_own_be_placed_again(qapp, home, fast):
+    w = FakeWatcher()
+    old = w.open(0x903, minimized=True)  # was open (minimised) before the feature was switched on
+    placer, w, _ = make(home, watcher=w)
+    old.minimized = False
+    w.activate(0x903)
+    settle()
+    assert old.moves == 0
+
+    win = w.open(0x904)  # placed once...
+    settle()
+    assert win.moves == 1
+    win.minimized = True  # ...then minimised, brought up again and moved by the user
+    w.activate(0x904)
+    settle(500)
+    win.minimized = False
+    win.rect = (10, 10, 600, 500)
+    w.activate(0x904)
+    settle()
+    assert win.rect == (10, 10, 600, 500) and win.moves == 1
+    placer.stop()
+
+
 def test_crossing_to_a_monitor_with_another_scale_is_corrected(qapp, home, fast):
     """Windows makes the window resize itself for the new scale: look again and correct once."""
     placer, w, _ = make(home)
@@ -468,7 +540,8 @@ def test_a_slow_double_click_release_still_gets_the_window_placed(qapp, home, fa
     placer.stop()
 
 
-def test_grabbing_the_window_right_after_it_opened_stops_corrections(qapp, home, fast):
+def test_grabbing_the_window_right_after_it_opened_stops_corrections(qapp, home, fast, caplog):
+    caplog.set_level("INFO", logger="versedesk.explorer")
     placer, w, _ = make(home)
     w.responsive = False
     win = w.open(0xF00)
@@ -477,6 +550,23 @@ def test_grabbing_the_window_right_after_it_opened_stops_corrections(qapp, home,
     w.pump(0xF00)
     settle()
     assert win.moves == 1 and not placer._jobs  # no second request
+    said = [r.message for r in caplog.records if "mouse button down after 1 move(s)" in r.message]
+    assert len(said) == 1 and "0xF00" in said[0]  # ...and log.txt says why this window was left
+    placer.stop()
+
+
+def test_a_click_after_the_window_was_seen_in_the_slot_adds_nothing_to_the_log(qapp, home, fast, caplog, monkeypatch):
+    caplog.set_level("INFO", logger="versedesk.explorer")
+    monkeypatch.setattr(explorer_placer, "CONFIRM_MS", 200)
+    placer, w, _ = make(home)
+    w.open(0xF01)
+    settle(80)  # moved, then seen in the slot; only the confirming look is still to come
+    assert placer.placed == 1 and placer._jobs
+    w.button_down = True
+    settle(350)
+    assert not placer._jobs and placer.placed == 1
+    assert sum("placed in the slot" in r.message for r in caplog.records) == 1
+    assert not any("mouse button down" in r.message for r in caplog.records)
     placer.stop()
 
 
@@ -524,6 +614,8 @@ def test_quitting_and_edit_mode_never_fail_because_of_this_feature(qapp, home, f
     placer.set_edit_mode(False)  # must not raise
     placer.stop()  # must not raise
     assert "explorer window slot" in placer.diagnostics()
+    del placer._frame.hide  # (tidy up: the frame of this test must not stay on screen)
+    placer._frame.hide()
 
 
 def test_before_the_user_placed_it_the_slot_is_centred(qapp, home, fast):

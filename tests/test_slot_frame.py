@@ -121,7 +121,7 @@ def test_the_whole_frame_can_be_grabbed_also_at_fractional_scaling(qapp):
         f.deleteLater()
 
 
-def test_across_two_monitors_with_different_scaling_the_size_never_changes(tmp_path):
+def test_across_two_monitors_with_different_scaling_the_size_is_never_left_to_chance(tmp_path):
     """The user's set-up. Qt's logical coordinates have a gap between a 150 % monitor and its
     neighbour, and a window straddling both changes its logical size: without care the frame
     flickers between the monitors and a size nobody chose gets saved."""
@@ -143,3 +143,12 @@ def test_across_two_monitors_with_different_scaling_the_size_never_changes(tmp_p
     assert r["steps_not_on_one_screen"] == 0 and r["screen_changes"] == 0, r
     x, y, w, h = r["saved"][-1]
     assert (x, y) == (700, 100) and x + w <= 1280 and y + h <= 720, r
+    # A frame larger than the other monitor: over there it is as large as fits (never hanging over the
+    # edge onto the neighbour), and that is what is saved when it is dropped there...
+    r = out["oversize_to_small"]
+    assert r["sizes"] == [[1280, 720], [1500, 900]] and r["steps_not_on_one_screen"] == 0, r
+    assert r["saved"] == [[0, 0, 1280, 720]] and r["final"] == [0, 0, 1280, 720] and r["final_screen"] == "A150", r
+    # ...while carried back in the same drag it has the size it was grabbed with again.
+    r = out["oversize_there_and_back"]
+    assert r["steps_not_on_one_screen"] == 0 and r["screen_changes"] == 2, r
+    assert r["saved"] == [[2040, 80, 1500, 900]] and r["final_screen"] == "B100", r

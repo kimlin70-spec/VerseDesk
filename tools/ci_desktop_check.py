@@ -947,6 +947,9 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
         time.sleep(5)
         expect("explorer slot: a window that was already open is not moved when the feature is switched on",
                seen_rect(w0) == natural, f"was {natural}, now {seen_rect(w0)}")
+        expect("explorer slot: ...because the app noted it as already open (log)",
+               any("1 Explorer window(s) already open" in ln for ln in slot_log(appdata, logged)),
+               " | ".join(ln[-160:] for ln in slot_log(appdata, logged)))
 
         w1 = open_folder(folders[1], timeout=20)
         if not w1:
@@ -1116,13 +1119,17 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
                               cloaked_hwnd, rect1)
             user32.PostMessageW(cloaked_hwnd, 0x0010, 0, 0)
 
-        # (3) A window that does not respond for a while (busy or hung Explorer): the app must
-        #     not wait for it - another window opened meanwhile is placed at once.
+        # (3) A window that does not respond for a while (busy or hung Explorer), from the moment
+        #     it appears: the app's request to move it has to wait, the app itself must not -
+        #     another window opened meanwhile is placed at once.
+        before_log = len(slot_log(appdata))
         slow, slow_hwnd = start_stand_in("slow", delay=4)
         helpers.append(slow)
         if slow_hwnd and expect("explorer slot: a window stops responding", wait_line(slow, "HUNG", 20)):
             time.sleep(1.0)  # the app has asked the stuck window to move by now
             expect("explorer slot: the stand-in window really is stuck", not responds(slow_hwnd, 300))
+            expect("explorer slot: ...so the request to move it is still waiting",
+                   not near(seen_rect(slow_hwnd), rect1), f"window at {seen_rect(slow_hwnd)}, slot {rect1}", warn_only=True)
             expect("explorer slot: VerseDesk keeps responding while an Explorer window is stuck", responds(verse))
             w6 = open_folder(folders[6])
             opened.append(w6)
@@ -1130,6 +1137,9 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
             close_windows([w6])
             wait_line(slow, "AWAKE", 20)
             expect_placed("explorer slot: the slow window is placed once it responds again", slow_hwnd, rect1)
+            expect("explorer slot: ...by the request that had been waiting (log)",
+                   any("placed in the slot" in ln and f"0x{slow_hwnd:X}" in ln for ln in slot_log(appdata, before_log)),
+                   " | ".join(ln[-120:] for ln in slot_log(appdata, before_log)))
             user32.PostMessageW(slow_hwnd, 0x0010, 0, 0)
 
         # (4) A window that refuses the slot's size: asked a limited number of times, then left alone.
@@ -1146,6 +1156,24 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
                    near(got[:2], rect1[:2]) and (got[2] - got[0], got[3] - got[1]) != (SLOT_1["width"], SLOT_1["height"]),
                    f"visible frame {got}, slot {rect1}")
             user32.PostMessageW(stubborn_hwnd, 0x0010, 0, 0)
+
+        # (5) A window that opens minimised has not been on screen yet: it is placed when the
+        #     user brings it up (not dropped because nothing could be done at first).
+        before_log = len(slot_log(appdata))
+        mini, mini_hwnd = start_stand_in("minimised", delay=6)  # longer than the app waits for it
+        helpers.append(mini)
+        if mini_hwnd and expect("explorer slot: a window that opened minimised is brought up",
+                                wait_line(mini, "RESTORED", 20)):
+            time.sleep(0.5)
+            clear_area(mini_hwnd, extra=(), spare=(api.process_id(verse),))
+            user32.SetForegroundWindow(mini_hwnd)
+            l, t, r, b = api.window_rect(mini_hwnd)
+            click(l + 120, t + 14)  # the user turns to it
+            expect_placed("explorer slot: ...and is placed then", mini_hwnd, rect1)
+            expect("explorer slot: ...after the app had waited for it to come on screen (log)",
+                   any("not on screen yet" in ln and f"0x{mini_hwnd:X}" in ln for ln in slot_log(appdata, before_log)),
+                   " | ".join(ln[-120:] for ln in slot_log(appdata, before_log)), warn_only=True)
+            user32.PostMessageW(mini_hwnd, 0x0010, 0, 0)
 
         # ...and after all that a real Explorer window is still placed (in another slot, so that
         # it cannot be Explorer's own memory; the app's log must name this very window).

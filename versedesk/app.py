@@ -110,6 +110,7 @@ class VerseDeskApp(QObject):
         self.autostart = autostart or Autostart.for_this_process()
         self.user_verses_path = user_verses_path or paths.user_verses_path()
         self.edit_mode = False
+        self._edit_for_slot = False  # 배치 편집 is on only because 탐색기 창 자리 고정 switched it on (to show the frame)
         self._quitting = False
 
         # verses: the user's own list (verses.json) when there is one, else the built-in list
@@ -577,6 +578,7 @@ class VerseDeskApp(QObject):
     @safe
     def set_edit_mode(self, on: bool) -> None:
         self.edit_mode = on
+        self._edit_for_slot = False  # whoever switches it from here on, it is theirs
         self.verse_widget.set_edit_mode(on)
         self.layer.set_click_through(self.verse_widget, not on)
         self.zones.set_edit_mode(on)
@@ -605,6 +607,7 @@ class VerseDeskApp(QObject):
     def set_explorer_slot(self, on: bool) -> None:
         """Tray: 탐색기 창 자리 고정. New Explorer windows open in the slot while it is on."""
         choose_place = on and not self.store.settings.explorer_window.has_position
+        undo_edit = not on and self._edit_for_slot  # the 배치 편집 this feature switched on goes with it
 
         def mutate(s):
             s.explorer_window.enabled = on
@@ -614,7 +617,9 @@ class VerseDeskApp(QObject):
         self.tray.set_explorer_slot_checked(self.store.settings.explorer_window.enabled)
         log.info("explorer window slot switched %s", "on" if on else "off")
         if choose_place:
+            by_us = not self.edit_mode
             self.set_edit_mode(True)  # the frame appears, so the place can be chosen right away
+            self._edit_for_slot = by_us
             self.tray.notify(
                 "탐색기 창 자리 고정",
                 "화면에 나타난 파란 틀이 탐색기 창이 열릴 자리입니다. 틀을 끌어서 옮기고 오른쪽 아래 모서리로 "
@@ -622,6 +627,8 @@ class VerseDeskApp(QObject):
             )
         elif on:
             self.tray.notify("탐색기 창 자리 고정", "새로 여는 탐색기 창이 정해 둔 자리에 열립니다. 자리를 바꾸려면 '배치 편집'을 켜세요.")
+        elif undo_edit:
+            self.set_edit_mode(False)  # otherwise the verse would keep catching clicks with nothing left to show why
 
     @safe
     def open_data_folder(self) -> None:

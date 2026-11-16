@@ -6,7 +6,9 @@ the awkward cases a real Explorer cannot be made to produce on demand:
 
   hidden    created hidden, shown after --delay seconds   (a window Explorer kept ready)
   cloaked   shown while cloaked, uncloaked after --delay   (the same, done with DWM cloaking)
-  slow      shown, then processes no messages for --delay  (a busy or hung Explorer)
+  slow      shown, then at once processes no messages for --delay  (a busy or hung Explorer:
+            whatever it is asked meanwhile has to wait)
+  minimised shown minimised, brought up (not activated) after --delay
   minsize   never smaller than 700x560                     (refuses the size of the slot)
   plain     just a window
 
@@ -28,6 +30,7 @@ WS_OVERLAPPEDWINDOW = 0x00CF0000
 WM_DESTROY = 0x0002
 WM_GETMINMAXINFO = 0x0024
 SW_SHOWNOACTIVATE = 4
+SW_SHOWMINNOACTIVE = 7
 PM_REMOVE = 1
 DWMWA_CLOAK = 13
 MIN_SIZE = (700, 560)
@@ -49,7 +52,7 @@ class MINMAXINFO(ctypes.Structure):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("scenario", choices=["hidden", "cloaked", "slow", "minsize", "plain"])
+    ap.add_argument("scenario", choices=["hidden", "cloaked", "slow", "minimised", "minsize", "plain"])
     ap.add_argument("--delay", type=float, default=5.0)
     ap.add_argument("--life", type=float, default=40.0)
     ap.add_argument("--rect", default="60,420,420,300", help="x,y,width,height")
@@ -139,10 +142,14 @@ def main() -> int:
         print("UNCLOAKED", flush=True)
     elif args.scenario == "slow":
         user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
-        alive = pump(0.3)
-        print("HUNG", flush=True)
+        print("HUNG", flush=True)  # from the very start: a request made now cannot be carried out yet
         time.sleep(args.delay)  # no messages are processed: requests from other programs queue up
         print("AWAKE", flush=True)
+    elif args.scenario == "minimised":
+        user32.ShowWindow(hwnd, SW_SHOWMINNOACTIVE)
+        alive = pump(args.delay)
+        user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+        print("RESTORED", flush=True)
     else:
         user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
     if alive:
