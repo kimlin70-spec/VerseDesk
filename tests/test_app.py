@@ -5,6 +5,7 @@ import json
 import os
 
 import pytest
+from PySide6.QtTest import QTest
 
 N_BUILTIN = 5
 
@@ -599,6 +600,33 @@ def test_explorer_slot_is_off_until_switched_on_and_then_shows_its_frame(qapp, h
 
         app.tray.explorer_slot_toggled.emit(True)  # a place is already chosen: edit mode is not forced again
         assert app.edit_mode is False
+    finally:
+        shutdown(app)
+
+
+def test_explorer_slot_places_a_new_window_through_the_whole_app(qapp, home, embedded, monkeypatch):
+    """The app's own screen information feeds the conversion (no Windows needed for that)."""
+    import versedesk.app as app_module
+    from tests.test_explorer_placer import FakeWatcher
+
+    watcher = FakeWatcher()
+    monkeypatch.setattr(app_module, "create_explorer_watcher", lambda: watcher)
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "settings.json").write_text(json.dumps(
+        {"explorer_window": {"enabled": True, "x": 60, "y": 70, "width": 600, "height": 400}}), encoding="utf-8")
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        assert watcher.started == 1 and app.tray.act_explorer_slot.isChecked() is True
+        screen = qapp.primaryScreen()
+        assert app._screen_infos()[0].scale == screen.devicePixelRatio()
+        watcher.open(0x77)
+        QTest.qWait(700)
+        scale = screen.devicePixelRatio()
+        assert watcher.visible_rect(0x77) == (round(60 * scale), round(70 * scale),
+                                              round(60 * scale) + round(600 * scale), round(70 * scale) + round(400 * scale))
+        assert "1 placed" in app.explorer.diagnostics()
+        app.quit()  # stops the watcher on the way out
+        assert watcher.stopped == 1
     finally:
         shutdown(app)
 

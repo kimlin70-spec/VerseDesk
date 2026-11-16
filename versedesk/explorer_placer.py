@@ -35,10 +35,11 @@ from versedesk.explorer_slot import (
     SlotSettings,
     close_enough,
     default_rect,
+    fit_into,
     outer_rect,
     to_native,
 )
-from versedesk.geometry import Rect, place_on_screens
+from versedesk.geometry import Rect, best_screen, place_on_screens
 from versedesk.settings import LoadResult, SettingsStore
 
 log = logging.getLogger("versedesk.explorer")
@@ -119,9 +120,11 @@ class ExplorerPlacer(QObject):
         monitor is gone) or, before the user placed it, the middle of the main screen."""
         rects, primary = self._work_areas()
         s = self.slot
-        if s.has_position:
-            return place_on_screens(Rect(s.x, s.y, s.width, s.height), rects, primary)
-        return default_rect(primary, s.width, s.height)
+        if not s.has_position:
+            return default_rect(primary, s.width, s.height)
+        r = place_on_screens(Rect(s.x, s.y, s.width, s.height), rects, primary)
+        i, _overlap = best_screen(r, rects)
+        return fit_into(r, rects[i] if i >= 0 else primary)  # a slot larger than this screen is shown smaller
 
     def native_target(self) -> NativeRect | None:
         return to_native(self.slot_rect(), list(self._screens()))
@@ -130,13 +133,19 @@ class ExplorerPlacer(QObject):
         self.sync_from_settings()
 
     def stop(self) -> None:
-        self._unwatch()
-        if self._frame is not None:
-            self._frame.hide()
+        try:
+            self._unwatch()
+            if self._frame is not None:
+                self._frame.hide()
+        except Exception:  # quitting must never be held up by this feature
+            log.exception("explorer window slot: stop failed")
 
     def set_edit_mode(self, on: bool) -> None:
         self._edit = on
-        self._update_frame()
+        try:
+            self._update_frame()
+        except Exception:  # 배치 편집 itself must keep working
+            log.exception("explorer window slot: could not show or hide the frame")
 
     def sync_from_settings(self) -> None:
         """Follow settings.json (start-up, the tray item, edits made outside the app)."""
@@ -180,17 +189,23 @@ class ExplorerPlacer(QObject):
         try:
             rects, primary = self._work_areas()
             placed = place_on_screens(Rect(x, y, width, height), rects, primary)
-            if (placed.x, placed.y) != (x, y) and self._frame is not None:
-                self._frame.move(placed.x, placed.y)
 
             def mutate(s):
                 slot = s.explorer_window
                 slot.x, slot.y, slot.width, slot.height = placed.x, placed.y, placed.w, placed.h
 
             self._apply_reload(self._store.update(mutate))
-            log.info("explorer window slot set to (%d, %d) %dx%d", placed.x, placed.y, placed.w, placed.h)
+            self._update_frame()  # the frame shows exactly what was saved
+            log.info("explorer window slot set to (%d, %d) %dx%d -> native %s%s",
+                     placed.x, placed.y, placed.w, placed.h, self.native_target(), self._frame_on_screen())
         except Exception:
             log.exception("explorer window slot: could not save the new place")
+
+    def _frame_on_screen(self) -> str:
+        """Where Windows really has the frame (for log.txt): must equal the computed native slot."""
+        if self._frame is None or not self._frame.isVisible() or self._watcher is None:
+            return ""
+        return f"; the frame window is at {self._watcher.window_rect(int(self._frame.winId()))}"
 
     # ------------------------------------------------------------------ watching
 
@@ -338,9 +353,12 @@ class ExplorerPlacer(QObject):
         return False
 
     def diagnostics(self) -> str:
-        s = self.slot
-        state = "on" if s.enabled else "off"
-        if s.enabled and not self._watching:
-            state += " (not watching)"
-        return (f"explorer window slot: {state}, slot {self.slot_rect()} -> native {self.native_target()}, "
-                f"{self.placed} placed, {len(self._jobs)} in progress")
+        try:
+            s = self.slot
+            state = "on" if s.enabled else "off"
+            if s.enabled and not self._watching:
+                state += " (not watching)"
+            return (f"explorer window slot: {state}, slot {self.slot_rect()} -> native {self.native_target()}, "
+                    f"{self.placed} placed, {len(self._jobs)} in progress")
+        except Exception as e:  # diagnostics must never fail
+            return f"explorer window slot: (diagnostics failed: {e})"

@@ -21,7 +21,6 @@ multiplied by that screen's scale factor.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -32,7 +31,6 @@ DEFAULT_HEIGHT = 600
 MIN_WIDTH = 480  # File Explorer itself does not get much smaller
 MIN_HEIGHT = 320
 MAX_SIZE = 8000
-SLOT_KEYS = ("enabled", "x", "y", "width", "height")
 
 NativeRect = tuple[int, int, int, int]  # left, top, right, bottom in native (physical) pixels
 
@@ -119,12 +117,19 @@ class ScreenInfo:
     scale: float  # QScreen.devicePixelRatio(): 1.0, 1.25, 1.5 ...
 
 
+def fit_into(rect: Rect, area: Rect) -> Rect:
+    """``rect`` moved - and, only if it is larger than ``area``, shrunk - to lie inside ``area``
+    (a slot saved on a big monitor, shown on a small one)."""
+    return clamp_into(Rect(rect.x, rect.y, min(rect.w, area.w), min(rect.h, area.h)), area)
+
+
 def screen_for(rect: Rect, screens: Sequence[ScreenInfo]) -> ScreenInfo | None:
-    """The screen a window with this geometry belongs to: the one holding its centre,
-    else the one showing most of it, else the first (main) screen."""
+    """The screen a window with this geometry belongs to: the one holding its centre (the
+    point Qt itself uses, QRect::center()), else the one showing most of it, else the
+    first (main) screen."""
     if not screens:
         return None
-    cx, cy = rect.x + rect.w // 2, rect.y + rect.h // 2
+    cx, cy = rect.x + (rect.w - 1) // 2, rect.y + (rect.h - 1) // 2
     for s in screens:
         if s.rect.x <= cx < s.rect.right and s.rect.y <= cy < s.rect.bottom:
             return s
@@ -133,8 +138,8 @@ def screen_for(rect: Rect, screens: Sequence[ScreenInfo]) -> ScreenInfo | None:
 
 
 def _qround(value: float) -> int:
-    """Round half up, like Qt's qRound (Python's round() rounds halves to even)."""
-    return int(math.floor(value + 0.5))
+    """Qt's qRound: halves away from zero (Python's round() rounds halves to even)."""
+    return int(value + 0.5) if value >= 0.0 else int(value - 0.5)
 
 
 def to_native(rect: Rect, screens: Sequence[ScreenInfo]) -> NativeRect | None:

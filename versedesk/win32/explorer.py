@@ -22,6 +22,7 @@ from ctypes import wintypes
 from typing import Callable
 
 from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
 from versedesk.win32 import api
@@ -51,12 +52,17 @@ class _Receiver(QWidget):
         return False, 0  # always let Qt handle the message normally
 
     def event(self, event):
-        if event.type() == QEvent.Type.WinIdChange:  # Qt made a new native window: register that one
-            try:
-                self._on_new_handle()
-            except Exception:
-                pass
+        if event.type() == QEvent.Type.WinIdChange:
+            # Qt is in the middle of creating or destroying the native window: only take
+            # note now, and register the new window once Qt has finished.
+            QTimer.singleShot(0, self._handle_changed)
         return super().event(event)
+
+    def _handle_changed(self) -> None:
+        try:
+            self._on_new_handle()
+        except Exception:
+            pass
 
 
 class ExplorerWatcher:
@@ -90,9 +96,14 @@ class ExplorerWatcher:
             self._register()
 
     def _register(self, again: bool = False) -> bool:
+        if not QGuiApplication.screens():
+            return False  # no screen at the moment (e.g. remote session closing): try at the next refresh
         hwnd = int(self._receiver.winId())  # creates the native window on first use
         if hwnd == self._registered and api.IsWindow(hwnd) and not again:
             return True
+        if self._registered:
+            log.info("explorer window slot: registering the window watcher again (%s)",
+                     "Explorer restarted" if again else "new receiver window")
         if self._registered and api.IsWindow(self._registered):
             api.DeregisterShellHookWindow(self._registered)
         self._registered = hwnd if api.RegisterShellHookWindow(hwnd) else 0

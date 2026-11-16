@@ -501,6 +501,31 @@ def test_a_slot_on_a_monitor_that_is_gone_moves_to_the_main_screen(qapp, home, f
     placer.stop()
 
 
+def test_a_slot_saved_on_a_bigger_monitor_is_shown_smaller_here(qapp, home, fast):
+    """Laptop taken off its docking station: the saved size must not hang over the screen."""
+    small = [ScreenInfo(Rect(0, 0, 1366, 728), 1.0)]
+    placer, w, store = make(home, slot={"enabled": True, "x": 100, "y": 50, "width": 1600, "height": 1000}, screens=small)
+    assert placer.slot_rect() == Rect(0, 0, 1366, 728)
+    w.open(0x1500)
+    settle()
+    assert w.visible_rect(0x1500) == (0, 0, 1366, 728)
+    assert store.settings.explorer_window.width == 1600  # the saved numbers stay for the big monitor
+    placer.stop()
+
+
+def test_quitting_and_edit_mode_never_fail_because_of_this_feature(qapp, home, fast):
+    class Exploding(FakeWatcher):
+        def stop(self):
+            raise OSError("boom")
+
+    placer, w, _ = make(home, watcher=Exploding())
+    placer.set_edit_mode(True)
+    placer._frame.hide = lambda: (_ for _ in ()).throw(RuntimeError("frame gone"))
+    placer.set_edit_mode(False)  # must not raise
+    placer.stop()  # must not raise
+    assert "explorer window slot" in placer.diagnostics()
+
+
 def test_before_the_user_placed_it_the_slot_is_centred(qapp, home, fast):
     placer, w, _ = make(home, slot={"enabled": True})
     assert placer.slot_rect() == Rect(510, 240, 900, 600)

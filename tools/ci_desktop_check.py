@@ -771,6 +771,12 @@ EXPLORER_CLASS = "CabinetWClass"
 SW_MAXIMIZE = 3
 SLOT_1 = dict(x=260, y=90, width=620, height=440)
 SLOT_2 = dict(x=330, y=60, width=560, height=500)
+SLOT_3 = dict(x=90, y=130, width=640, height=430)  # never used while the feature is on
+# Explorer remembers by itself where its last window was closed (and not always the last one),
+# so a check must never rely on that: every "placed" check uses a slot the previous window
+# was not in, and every "left alone" check a rectangle no window was ever put in.
+SLOT_WARNINGS = ("RegisterShellHookWindow failed", "could not start watching", "pausing corrections",
+                 "Windows refused the move", "could not be restored", "gave up waiting")
 
 
 def slot_rect(slot: dict) -> tuple[int, int, int, int]:
@@ -816,7 +822,9 @@ def set_slot(appdata: Path, **slot) -> None:
     path = appdata / "settings.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     data["explorer_window"] = slot
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = path.with_name("settings.json.ci-tmp")  # the app re-reads the file every 2 s: never show it half-written
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def saved_slot(appdata: Path) -> dict:
@@ -955,6 +963,35 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
             expect("explorer slot: the window that was already open is still where it was",
                    seen_rect(w0) == natural, f"was {natural}, now {seen_rect(w0)}")
 
+        # While the mouse button is held nothing is moved; after the release the window is placed
+        # (a double-click whose second click is still held when the window appears).
+        close_windows([w0, w1])
+        set_slot(appdata, enabled=True, **SLOT_2)
+        time.sleep(5)
+        keeper = subprocess.Popen([sys.executable, "-c", (
+            "import tkinter as tk; r = tk.Tk(); r.title('VerseDesk CI keeper'); "
+            "r.geometry('260x120+20+600'); r.after(60000, r.destroy); r.mainloop()")])
+        kw = find_window("VerseDesk CI keeper", 30)
+        time.sleep(1)
+        if kw:
+            kl, kt, kr, kb = api.window_rect(kw)
+            user32.SetCursorPos(kl + 130, kt + 60)  # inside the keeper window: holding there drags nothing
+            time.sleep(0.2)
+            user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+            try:
+                w1 = open_folder(folders[1])
+                opened.append(w1)
+                time.sleep(2.5)
+                held_at = seen_rect(w1) if w1 else None
+                expect("explorer slot: while the mouse button is held, a new window is not moved yet",
+                       bool(w1) and not near(held_at, slot_rect(SLOT_2)), f"slot {slot_rect(SLOT_2)}, window at {held_at}")
+            finally:
+                user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+            expect_placed("explorer slot: ...and it is placed as soon as the button is released", w1, slot_rect(SLOT_2))
+        keeper.kill()
+        set_slot(appdata, enabled=True, **SLOT_1)
+        time.sleep(5)
+
         # The user moves the window afterwards: it is theirs now.
         api.SetWindowPos(w1, None, 40, 300, 520, 380, api.SWP_NOZORDER | api.SWP_NOACTIVATE)
         time.sleep(0.5)
@@ -962,7 +999,8 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
         user32.SetForegroundWindow(w1)  # ...and clicking it (activation) must not pull it back either
         time.sleep(3)
         expect("explorer slot: a window moved afterwards stays where it was put",
-               seen_rect(w1) == moved and not near(moved, rect1), f"moved to {moved}, later {seen_rect(w1)}")
+               seen_rect(w1) == moved and not near(moved, rect1) and not near(moved, rect2),
+               f"moved to {moved}, later {seen_rect(w1)}")
 
         # A changed slot is used for the next window, opened the way a double-click on a
         # desktop folder does (the window then belongs to the shell's own process).
@@ -1013,17 +1051,24 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
         opened.append(w4)
         expect_placed("explorer slot: after explorer.exe restarted, new windows are still placed", w4, rect2)
 
-        # Switched off again: the next window is not sent to the (now different) slot.
+        # Switched off again: the next window is not sent to the slot (a rectangle no window was
+        # ever in), and the app does not even look at it.
         close_windows([w4])
-        set_slot(appdata, enabled=False, **SLOT_1)
+        set_slot(appdata, enabled=False, **SLOT_3)
         time.sleep(5)
+        quiet_from = len(slot_log(appdata))
         w5 = open_folder(folders[5])
         opened.append(w5)
         time.sleep(4)
         expect("explorer slot: switched off again, new windows are left alone",
-               bool(w5) and not near(seen_rect(w5), rect1), f"slot {rect1}, window at {seen_rect(w5) if w5 else None}")
+               bool(w5) and not near(seen_rect(w5), slot_rect(SLOT_3)) and not slot_log(appdata, quiet_from),
+               f"slot {slot_rect(SLOT_3)}, window at {seen_rect(w5) if w5 else None}, log {slot_log(appdata, quiet_from)}")
     finally:
-        print_slot_log(appdata, logged)
+        lines = print_slot_log(appdata, logged)
+        expect("explorer slot: no trouble reported in the app's log (real Explorer windows)",
+               not [ln for ln in lines if any(word in ln for word in SLOT_WARNINGS)])
+        expect("explorer slot: the window watcher is registered again when Explorer restarts (log)",
+               any("registering the window watcher again (Explorer restarted)" in ln for ln in lines), warn_only=True)
         close_windows([w for w in opened if w] + explorer_windows())
         end_app(proc, appdata, "explorer slot: the app quits cleanly")
 
@@ -1102,10 +1147,17 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
                    f"visible frame {got}, slot {rect1}")
             user32.PostMessageW(stubborn_hwnd, 0x0010, 0, 0)
 
-        # ...and after all that a real Explorer window is still placed.
+        # ...and after all that a real Explorer window is still placed (in another slot, so that
+        # it cannot be Explorer's own memory; the app's log must name this very window).
+        set_slot(appdata, enabled=True, **SLOT_2)
+        time.sleep(5)
+        before_log = len(slot_log(appdata))
         w7 = open_folder(folders[7])
         opened.append(w7)
-        expect_placed("explorer slot: after the awkward windows, a real Explorer window is still placed", w7, rect1)
+        expect_placed("explorer slot: after the awkward windows, a real Explorer window is still placed", w7, rect2)
+        expect("explorer slot: ...by the app (log)",
+               any("placed in the slot" in ln and f"0x{w7:X}" in ln for ln in slot_log(appdata, before_log)),
+               " | ".join(ln[-120:] for ln in slot_log(appdata, before_log)))
     finally:
         print_slot_log(appdata, logged)
         for h in helpers:
@@ -1153,9 +1205,53 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
         w8 = open_folder(folders[0])
         expect_placed("explorer slot: a window opened now covers exactly the frame", w8, (l2, t2, r2, b2))
         close_windows([w8])
+        # Show desktop (Win+D) while the frame is visible: the verse is lifted as usual, the frame
+        # stays above it, and the desktop layer does not start fighting over the z-order.
+        if verse:
+            press_win_d()
+            time.sleep(3)
+            host = find_desktop_host()
+            expect("explorer slot: with the frame visible, Win+D still lifts the verse above the desktop",
+                   zindex(verse) < zindex(host), f"z(verse)={zindex(verse)} z(host)={zindex(host)}", warn_only=True)
+            expect("explorer slot: ...and the frame stays above the verse", zindex(frame) < zindex(verse),
+                   f"z(frame)={zindex(frame)} z(verse)={zindex(verse)}")
+            press_win_d()
+            time.sleep(3)
+            expect("explorer slot: after Win+D twice the verse is back on the desktop layer",
+                   check_placement(verse, find_desktop_host())[0], warn_only=True)
+            log_text = (appdata / "log.txt").read_text(encoding="utf-8", errors="replace")
+            expect("explorer slot: the desktop layer never had to pause corrections",
+                   "pausing corrections" not in log_text)
     finally:
         close_windows(explorer_windows())
         end_app(proc, appdata, "explorer slot: the edit-mode run quits cleanly")
+        set_slot(appdata, enabled=False)
+
+    # ---- fractional scaling: the same code path as a 150 % display (QT_SCALE_FACTOR) ---------
+    # Settings are logical pixels; Windows moves windows in native pixels. With these odd numbers
+    # every value ends in .5 after scaling, so wrong rounding would show (154,92,908,594 or
+    # 155,92,909,594 instead of 155,92,910,595).
+    set_slot(appdata, enabled=True, x=103, y=61, width=503, height=335)
+    expected = (155, 92, 910, 595)
+    exit_file(appdata).unlink(missing_ok=True)
+    proc = subprocess.Popen([str(exe), "--edit-mode", "--exit-file", str(exit_file(appdata)), "--exit-after", "200"],
+                            env=dict(os.environ, QT_SCALE_FACTOR="1.5"))
+    try:
+        frame = find_window(SLOT_FRAME_TITLE, 60)
+        if expect("explorer slot (150 %): the frame appears", bool(frame)):
+            time.sleep(3)
+            expect("explorer slot (150 %): Qt puts the frame at the scaled place", api.window_rect(frame) == expected,
+                   f"frame {api.window_rect(frame)}, expected {expected}")
+            before_log = len(slot_log(appdata))
+            w9 = open_folder(folders[1])
+            expect_placed("explorer slot (150 %): a new Explorer window covers exactly the frame", w9, expected)
+            expect("explorer slot (150 %): ...within one pixel", bool(w9) and near(seen_rect(w9), api.window_rect(frame), 1),
+                   f"window {seen_rect(w9) if w9 else None}, frame {api.window_rect(frame)}")
+            print_slot_log(appdata, before_log)
+            close_windows([w9])
+    finally:
+        close_windows(explorer_windows())
+        end_app(proc, appdata, "explorer slot (150 %): the app quits cleanly")
         set_slot(appdata, enabled=False)
 
 

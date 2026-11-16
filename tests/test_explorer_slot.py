@@ -11,6 +11,7 @@ from versedesk.explorer_slot import (
     SlotSettings,
     close_enough,
     default_rect,
+    fit_into,
     outer_rect,
     screen_for,
     slot_from_dict,
@@ -114,6 +115,19 @@ def test_invisible_borders_are_added_around_the_slot():
     assert outer_rect(target, window, visible) == (293, 120, 1207, 727)
     assert outer_rect(target, visible, visible) == target  # no invisible border (e.g. measurement unavailable)
     assert outer_rect(target, (0, 0, 2000, 2000), visible) == target  # nonsense measurement: ignored
+
+
+def test_a_slot_larger_than_the_screen_is_shrunk_to_fit():
+    area = Rect(0, 0, 1366, 728)
+    assert fit_into(Rect(100, 50, 1600, 1000), area) == Rect(0, 0, 1366, 728)
+    assert fit_into(Rect(900, 50, 800, 500), area) == Rect(566, 50, 800, 500)  # only moved
+    assert fit_into(Rect(100, 50, 800, 500), area) == Rect(100, 50, 800, 500)  # untouched
+
+
+def test_rounding_is_qts_also_for_negative_values():
+    from versedesk.explorer_slot import _qround
+
+    assert [_qround(v) for v in (2.5, 3.5, -2.5, -0.4, 0.49)] == [3, 4, -3, 0, 0]
 
 
 def test_close_enough():

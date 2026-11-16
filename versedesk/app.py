@@ -83,6 +83,13 @@ def _to_rect(qrect) -> Rect:
     return Rect(qrect.x(), qrect.y(), qrect.width(), qrect.height())
 
 
+def _work_area(screen) -> Rect:
+    """The screen's work area (without the taskbar), never reaching outside the screen itself:
+    Qt 6.10-6.11.3 reports it shifted when the taskbar is at the top or left above 100 %."""
+    area = screen.availableGeometry().intersected(screen.geometry())
+    return _to_rect(area if area.isValid() else screen.geometry())
+
+
 class VerseDeskApp(QObject):
     def __init__(
         self,
@@ -475,10 +482,10 @@ class VerseDeskApp(QObject):
 
     def _screen_rects(self) -> tuple[list[Rect], Rect]:
         screens = QGuiApplication.screens()
-        rects = [_to_rect(s.availableGeometry()) for s in screens]
+        rects = [_work_area(s) for s in screens]
         primary = QGuiApplication.primaryScreen()
         if primary is not None:
-            prim = _to_rect(primary.availableGeometry())
+            prim = _work_area(primary)
         elif rects:
             prim = rects[0]
         else:
