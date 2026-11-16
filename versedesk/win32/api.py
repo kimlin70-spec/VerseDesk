@@ -56,7 +56,9 @@ SWP_ASYNCWINDOWPOS = 0x4000  # post the request to the window's own thread: neve
 
 SW_SHOWNOACTIVATE = 4  # back to the normal (not maximised) size without activating
 
-HSHELL_WINDOWCREATED = 1  # shell hook: a top-level application window appeared
+HSHELL_WINDOWCREATED = 1  # shell hook: a top-level application window was shown
+HSHELL_WINDOWACTIVATED = 4  # ...or activated (0x8004 with the "rude app" high bit)
+DWM_CLOAKED_SHELL = 0x2  # cloaked by the shell: the window is on another virtual desktop
 VK_LBUTTON = 0x01
 VK_RBUTTON = 0x02
 SM_SWAPBUTTON = 23
@@ -245,6 +247,11 @@ def frame_bounds(hwnd: int) -> tuple[int, int, int, int] | None:
     return (r.left, r.top, r.right, r.bottom)
 
 
+def last_error() -> int:
+    """The Win32 error code of the last failed user32 call on this thread."""
+    return ctypes.get_last_error()
+
+
 def top_level_windows() -> list[int]:
     out: list[int] = []
 
@@ -265,12 +272,17 @@ def style(hwnd: int) -> int:
     return GetWindowLongPtrW(hwnd, GWL_STYLE) & 0xFFFFFFFF
 
 
-def is_cloaked(hwnd: int) -> bool:
+def cloak_state(hwnd: int) -> int:
+    """DWM's cloak flags for the window (0 = shown normally, or DWM cannot tell)."""
     if DwmGetWindowAttribute is None:
-        return False
+        return 0
     val = wintypes.DWORD(0)
     hr = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, ctypes.byref(val), ctypes.sizeof(val))
-    return hr == 0 and val.value != 0
+    return val.value if hr == 0 else 0
+
+
+def is_cloaked(hwnd: int) -> bool:
+    return cloak_state(hwnd) != 0
 
 
 def exclude_from_peek(hwnd: int) -> None:

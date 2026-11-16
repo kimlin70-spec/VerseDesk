@@ -82,6 +82,12 @@ def test_native_on_a_scaled_main_screen():
     assert to_native(Rect(100, 80, 800, 600), screens) == (125, 100, 1125, 850)
 
 
+def test_halves_round_up_like_qt_does():
+    """At 125 % two logical pixels are 2.5 native ones: Qt shows the frame at 3, so must we."""
+    screens = [ScreenInfo(Rect(0, 0, 1536, 864), 1.25)]
+    assert to_native(Rect(2, 6, 482, 322), screens) == (3, 8, 3 + 603, 8 + 403)  # 2.5->3, 7.5->8, 602.5->603, 402.5->403
+
+
 def test_native_on_a_second_monitor_with_another_scale():
     """The screen's corner is the same point in both spaces; distances from it are scaled."""
     main = ScreenInfo(Rect(0, 0, 1280, 720), 1.5)  # 1920x1080 at 150 %

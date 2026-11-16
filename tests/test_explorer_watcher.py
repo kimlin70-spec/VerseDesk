@@ -11,15 +11,21 @@ import pytest
 from PySide6.QtTest import QTest
 
 SHELLHOOK = 0xC123
+TASKBAR_CREATED = 0xC124
 
 
 class FakeApi(types.SimpleNamespace):
     def __init__(self):
         super().__init__(
             SWP_NOZORDER=0x4, SWP_NOACTIVATE=0x10, SWP_NOOWNERZORDER=0x200, SWP_ASYNCWINDOWPOS=0x4000,
-            SW_SHOWNOACTIVATE=4, HSHELL_WINDOWCREATED=1, VK_LBUTTON=1, VK_RBUTTON=2, SM_SWAPBUTTON=23,
+            SW_SHOWNOACTIVATE=4, HSHELL_WINDOWCREATED=1, HSHELL_WINDOWACTIVATED=4, DWM_CLOAKED_SHELL=2,
+            VK_LBUTTON=1, VK_RBUTTON=2, SM_SWAPBUTTON=23,
         )
-        self.classes = {0x10: "CabinetWClass", 0x11: "Notepad", 0x12: "CabinetWClass"}
+        self.classes = {0x10: "CabinetWClass", 0x11: "Notepad", 0x12: "CabinetWClass",
+                        0x13: "CabinetWClass", 0x14: "CabinetWClass", 0x15: "CabinetWClass"}
+        self.hidden = {0x13}  # kept ready in the background by Explorer
+        self.cloaks = {0x14: 2, 0x15: 1}  # on another virtual desktop / cloaked by the program
+        self.move_result = 1
         self.registered = []
         self.deregistered = []
         self.moves = []
@@ -29,8 +35,16 @@ class FakeApi(types.SimpleNamespace):
         self.visible_frames = {0x10: (100, 100, 900, 600)}
 
     def RegisterWindowMessageW(self, name):  # noqa: N802
-        assert name == "SHELLHOOK"
-        return SHELLHOOK
+        return {"SHELLHOOK": SHELLHOOK, "TaskbarCreated": TASKBAR_CREATED}[name]
+
+    def last_error(self):
+        return 5
+
+    def cloak_state(self, hwnd):
+        return self.cloaks.get(hwnd, 0)
+
+    def is_cloaked(self, hwnd):
+        return self.cloak_state(hwnd) != 0
 
     def RegisterShellHookWindow(self, hwnd):  # noqa: N802
         self.registered.append(hwnd)
@@ -44,7 +58,7 @@ class FakeApi(types.SimpleNamespace):
         return 1 if hwnd in self.classes or hwnd in self.registered else 0
 
     def IsWindowVisible(self, hwnd):  # noqa: N802
-        return 1
+        return 0 if hwnd in self.hidden else 1
 
     def IsIconic(self, hwnd):  # noqa: N802
         return 0
@@ -79,7 +93,7 @@ class FakeApi(types.SimpleNamespace):
 
     def SetWindowPos(self, hwnd, after, x, y, w, h, flags):  # noqa: N802
         self.moves.append((hwnd, after, x, y, w, h, flags))
-        return 1
+        return self.move_result
 
     def ShowWindowAsync(self, hwnd, cmd):  # noqa: N802
         self.shows.append((hwnd, cmd))
@@ -105,42 +119,64 @@ def _post(watcher, message, wparam, lparam):
     watcher._receiver.nativeEvent(b"windows_generic_MSG", ctypes.addressof(msg))
 
 
-def test_new_window_notifications_reach_the_callback(explorer):
+def test_shown_and_activated_explorer_windows_reach_the_callback(explorer):
     module, fake = explorer
     watcher = module.ExplorerWatcher()
     seen = []
-    assert watcher.start(seen.append) is True
+    assert watcher.start(lambda hwnd, created: seen.append((hwnd, created))) is True
     assert len(fake.registered) == 1 and fake.registered[0] == int(watcher._receiver.winId())
     _post(watcher, SHELLHOOK, 1, 0x10)  # HSHELL_WINDOWCREATED
-    _post(watcher, SHELLHOOK, 0x8001, 0x12)  # the same with the high bit some builds set
-    _post(watcher, SHELLHOOK, 4, 0x11)  # HSHELL_WINDOWACTIVATED: not ours
-    _post(watcher, 0x0046, 1, 0x11)  # some other message
+    _post(watcher, SHELLHOOK, 0x8001, 0x12)  # the same with the high bit
+    _post(watcher, SHELLHOOK, 4, 0x10)  # HSHELL_WINDOWACTIVATED
+    _post(watcher, SHELLHOOK, 0x8004, 0x12)  # HSHELL_RUDEAPPACTIVATED
+    _post(watcher, SHELLHOOK, 1, 0x11)  # another program's window: filtered out at once
+    _post(watcher, SHELLHOOK, 4, 0)  # the desktop was activated: no window
+    _post(watcher, SHELLHOOK, 5, 0x10)  # HSHELL_GETMINRECT: lParam is a pointer there, never read
+    _post(watcher, SHELLHOOK, 2, 0x10)  # HSHELL_WINDOWDESTROYED (also sent when merely hidden): ignored
+    _post(watcher, SHELLHOOK, 6, 0x10)  # HSHELL_REDRAW (title changed): ignored
+    _post(watcher, 0x0046, 1, 0x10)  # some other message
     QTest.qWait(20)
-    assert seen == [0x10, 0x12]
+    assert seen == [(0x10, True), (0x12, True), (0x10, False), (0x12, False)]
     watcher.stop()
     assert fake.deregistered == fake.registered
     _post(watcher, SHELLHOOK, 1, 0x10)  # after stop: ignored
     QTest.qWait(20)
-    assert seen == [0x10, 0x12]
+    assert len(seen) == 4
 
 
 def test_restart_registers_again_and_refresh_is_harmless(explorer):
     module, fake = explorer
     watcher = module.ExplorerWatcher()
-    watcher.start(lambda h: None)
+    watcher.start(lambda h, c: None)
     watcher.refresh()  # same native window: nothing to do
     assert len(fake.registered) == 1
     watcher.stop()
     watcher.refresh()  # stopped: nothing
-    watcher.start(lambda h: None)
+    watcher.start(lambda h, c: None)
     assert len(fake.registered) == 2
     watcher.stop()
+
+
+def test_an_explorer_restart_registers_the_hook_again(explorer):
+    module, fake = explorer
+    watcher = module.ExplorerWatcher()
+    watcher.start(lambda h, c: None)
+    _post(watcher, TASKBAR_CREATED, 0, 0)  # broadcast by a (re)started Explorer
+    QTest.qWait(20)
+    assert len(fake.registered) == 2 and len(fake.deregistered) == 1
+    watcher.stop()
+    _post(watcher, TASKBAR_CREATED, 0, 0)  # while off: nothing
+    QTest.qWait(20)
+    assert len(fake.registered) == 2
 
 
 def test_looking_at_windows(explorer):
     module, fake = explorer
     watcher = module.ExplorerWatcher()
-    assert watcher.explorer_windows() == [0x10, 0x12]
+    # open = visible, and not cloaked unless by the shell (another virtual desktop)
+    assert watcher.open_explorer_windows() == [0x10, 0x12, 0x14]
+    assert "0x13" in watcher.describe_all() and "cloak=2" in watcher.describe_all()
+    assert watcher.is_cloaked(0x15) and not watcher.is_cloaked(0x10)
     assert watcher.is_explorer_window(0x10) and not watcher.is_explorer_window(0x11)
     assert not watcher.is_explorer_window(0x99)  # no such window
     assert watcher.exists(0x10) and not watcher.exists(0x99)
@@ -153,13 +189,15 @@ def test_looking_at_windows(explorer):
 def test_moving_never_waits_for_explorer(explorer):
     module, fake = explorer
     watcher = module.ExplorerWatcher()
-    watcher.move(0x10, (293, 120, 1207, 727))
+    assert watcher.move(0x10, (293, 120, 1207, 727)) is True
     hwnd, after, x, y, w, h, flags = fake.moves[0]
     assert (hwnd, after, x, y, w, h) == (0x10, None, 293, 120, 914, 607)
     assert flags & 0x4000, "SWP_ASYNCWINDOWPOS: a hung Explorer must not hang VerseDesk"
     assert flags & 0x4 and flags & 0x10, "no z-order change, no activation"
-    watcher.restore(0x12)
-    assert fake.shows == [(0x12, 4)]
+    assert watcher.restore(0x12) is True
+    assert fake.shows == [(0x12, 4)], "SW_SHOWNOACTIVATE: back to normal size without stealing the focus"
+    fake.move_result = 0
+    assert watcher.move(0x10, (0, 0, 10, 10)) is False and isinstance(watcher.last_error(), int)
 
 
 def test_mouse_button_follows_swapped_buttons(explorer):

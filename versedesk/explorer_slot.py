@@ -21,6 +21,7 @@ multiplied by that screen's scale factor.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -131,14 +132,19 @@ def screen_for(rect: Rect, screens: Sequence[ScreenInfo]) -> ScreenInfo | None:
     return best if rect.intersection_area(best.rect) > 0 else screens[0]
 
 
+def _qround(value: float) -> int:
+    """Round half up, like Qt's qRound (Python's round() rounds halves to even)."""
+    return int(math.floor(value + 0.5))
+
+
 def to_native(rect: Rect, screens: Sequence[ScreenInfo]) -> NativeRect | None:
     """Logical rectangle -> native (left, top, right, bottom), or None without screens."""
     s = screen_for(rect, screens)
     if s is None or s.scale <= 0:
         return None
-    left = s.rect.x + round((rect.x - s.rect.x) * s.scale)
-    top = s.rect.y + round((rect.y - s.rect.y) * s.scale)
-    return (left, top, left + round(rect.w * s.scale), top + round(rect.h * s.scale))
+    left = s.rect.x + _qround((rect.x - s.rect.x) * s.scale)
+    top = s.rect.y + _qround((rect.y - s.rect.y) * s.scale)
+    return (left, top, left + _qround(rect.w * s.scale), top + _qround(rect.h * s.scale))
 
 
 def outer_rect(target: NativeRect, window: NativeRect, visible: NativeRect) -> NativeRect:

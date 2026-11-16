@@ -3,14 +3,18 @@
 ``ExplorerPlacer`` ties together
   * the slot kept in settings.json (versedesk/explorer_slot.py),
   * the frame shown in 배치 편집 (versedesk/ui/slot_frame.py), and
-  * a *watcher* that reports newly opened Explorer windows and can move them
+  * a *watcher* that reports Explorer windows as they appear and can move them
     (versedesk/win32/explorer.py on Windows; none elsewhere, so nothing happens there).
 
 Rules (kept deliberately narrow):
   * off by default; while it is off nothing is watched at all;
-  * only Explorer windows opened after the feature was switched on are placed, each once -
-    windows that were already open, and windows the user moves afterwards, are left alone;
-  * nothing is moved while a mouse button is held (e.g. a tab being dragged out of a window);
+  * only Explorer windows that come on screen after the feature was switched on are placed,
+    each once - windows that were already open, and windows the user moves afterwards, are
+    left alone;
+  * a window is placed when it is really on screen (visible, not cloaked), never earlier;
+  * nothing is moved while the mouse button is held: a double-click that is still held is
+    waited for, a window that was dragged meanwhile (a tab pulled out of another window)
+    stays where the user dropped it, and once the user grabs something the app lets go;
   * moving never waits for Explorer (asynchronous requests); the result is looked at a
     moment later and corrected a limited number of times, then the window is left alone;
   * every failure is logged and ignored - this must never disturb the rest of the app.
@@ -19,6 +23,7 @@ Rules (kept deliberately narrow):
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -38,13 +43,21 @@ from versedesk.settings import LoadResult, SettingsStore
 
 log = logging.getLogger("versedesk.explorer")
 
+MAX_MOVES = 3  # the first move plus two corrections (e.g. after crossing to a monitor with another scale)
+CHECK_MS = 150  # how soon after a request the result is looked at
+MAX_CHECKS = 40  # ...and how often at most (about 6 s for an Explorer that is slow to respond)
+CONFIRM_MS = 400  # one more look after the window first sat in the slot
+MOUSE_WAIT_MS = 200  # while the mouse button is held: look again this often
+MAX_MOUSE_WAITS = 150  # ...for at most 30 s
+MAX_HIDDEN_CHECKS = 20  # a window reported while hidden or cloaked: wait about 3 s, then forget it
+REFUSED_AFTER = 4  # looks without any change after a repeated request: the window keeps its own size
+TOLERANCE = 1  # native pixels
+MAX_AGAIN_LOGS = 5
 
 
 def create_explorer_watcher():
     """The Windows watcher, or None elsewhere (and if it cannot be set up: the feature then
     simply does nothing, the rest of the app is unaffected)."""
-    import sys
-
     if sys.platform != "win32":
         return None
     try:
@@ -56,22 +69,17 @@ def create_explorer_watcher():
         return None
 
 
-MAX_MOVES = 3  # the first move plus two corrections (e.g. after crossing to a monitor with another scale)
-CHECK_MS = 150  # how soon after a move request the result is looked at
-MAX_CHECKS = 40  # ...and how often at most (about 6 s for an Explorer that is slow to respond)
-MOUSE_WAIT_MS = 200  # while a mouse button is held: look again this often
-MAX_MOUSE_WAITS = 150  # ...for at most 30 s
-MAX_RESTORES = 2
-TOLERANCE = 1  # native pixels
-
-
 @dataclass
 class _Job:
     first_rect: NativeRect  # the window rectangle when the window was first seen
     moves: int = 0
     checks: int = 0
+    hidden_checks: int = 0
     mouse_waits: int = 0
-    restores: int = 0
+    unchanged: int = 0  # looks at which the window was still where it was when last asked to move
+    restore_asked: bool = False
+    in_slot: bool = False  # it sat in the slot at the last look (one confirming look follows)
+    counted: bool = False
     asked_from: NativeRect | None = None  # the window rectangle when the last move was requested
 
 
@@ -97,6 +105,7 @@ class ExplorerPlacer(QObject):
         self._frame = None
         self._seen: set[int] = set()
         self._jobs: dict[int, _Job] = {}
+        self._again_logs = 0
         self.placed = 0  # windows put into the slot since the start (for diagnostics and tests)
 
     # ------------------------------------------------------------------ settings and frame
@@ -188,10 +197,13 @@ class ExplorerPlacer(QObject):
     def _watch(self) -> None:
         if self._watcher is None:
             return  # not on Windows: the setting and the frame work, nothing is moved
-        self._seen = set(self._watcher.explorer_windows())  # already open: never touched
-        if self._watcher.start(self._on_new_window):
+        # What the user has open now is never touched. (A window Explorer keeps hidden for
+        # later is not "open": it is placed when it first comes on screen.)
+        self._seen = set(self._watcher.open_explorer_windows())
+        if self._watcher.start(self._on_window_event):
             self._watching = True
-            log.info("explorer window slot on (%d Explorer windows already open are left alone)", len(self._seen))
+            log.info("explorer window slot on: slot %s -> native %s; %d Explorer window(s) already open are left alone\n%s",
+                     self.slot_rect(), self.native_target(), len(self._seen), self._watcher.describe_all())
         else:
             log.warning("explorer window slot: could not start watching for new windows")
 
@@ -204,14 +216,21 @@ class ExplorerPlacer(QObject):
             self._watcher.stop()
             log.info("explorer window slot off")
 
-    def _on_new_window(self, hwnd: int) -> None:
-        """A top-level window appeared (called by the watcher on the GUI thread)."""
+    def _on_window_event(self, hwnd: int, created: bool = True) -> None:
+        """An Explorer window was shown (``created``) or activated; called by the watcher on
+        the GUI thread.  Activation is the fallback for a window whose showing was not
+        reported or happened while it could not be placed yet."""
         try:
             w = self._watcher
             if not self._watching or not hwnd:
                 return
             self._seen = {h for h in self._seen if w.exists(h)}  # forget closed windows (handles get reused)
-            if hwnd in self._seen or not w.is_explorer_window(hwnd):
+            if hwnd in self._seen:
+                if created and hwnd not in self._jobs and self._again_logs < MAX_AGAIN_LOGS:
+                    self._again_logs += 1
+                    log.info("explorer window shown again, left alone (placed or already open before): %s", w.describe(hwnd))
+                return
+            if not w.is_explorer_window(hwnd):
                 return
             self._seen.add(hwnd)
             self._jobs[hwnd] = _Job(first_rect=w.window_rect(hwnd))
@@ -237,7 +256,20 @@ class ExplorerPlacer(QObject):
     def _advance(self, hwnd: int, job: _Job) -> bool:
         """One look at the window. Returns True when there is nothing more to do with it."""
         w = self._watcher
-        if not self._watching or not w.exists(hwnd) or w.is_minimized(hwnd):
+        if not self._watching or not w.exists(hwnd):
+            return True
+        if not w.is_visible(hwnd) or w.is_cloaked(hwnd):
+            # Not on screen (yet): it is not placed now, and it does not count as handled, so
+            # that it is placed when it really appears (reported again, or activated).
+            job.hidden_checks += 1
+            if job.hidden_checks > MAX_HIDDEN_CHECKS:
+                self._seen.discard(hwnd)
+                log.info("explorer window is not on screen yet (hidden or cloaked); it will be placed when it shows: %s",
+                         w.describe(hwnd))
+                return True
+            self._later(hwnd, CHECK_MS)
+            return False
+        if w.is_minimized(hwnd):
             return True
         if w.mouse_button_down():
             if job.moves:
@@ -248,42 +280,60 @@ class ExplorerPlacer(QObject):
             self._later(hwnd, MOUSE_WAIT_MS)
             return False
         window = w.window_rect(hwnd)
-        if job.mouse_waits and window != job.first_rect:
-            log.info("explorer window %s was dragged while it opened; left where the user put it", w.describe(hwnd))
+        if job.mouse_waits and not job.moves and window != job.first_rect:
+            log.info("explorer window was dragged while it opened; left where the user put it: %s", w.describe(hwnd))
             return True
         target = self.native_target()
         if target is None:
             return True
         job.checks += 1
         if job.checks > MAX_CHECKS:
-            log.warning("explorer window %s: gave up waiting for it to respond", w.describe(hwnd))
+            log.warning("explorer window: gave up waiting for it to respond: %s", w.describe(hwnd))
             return True
-        if not w.is_visible(hwnd):
-            self._later(hwnd, CHECK_MS)
-            return False
         if w.is_maximized(hwnd):
-            if job.restores >= MAX_RESTORES:
-                return True
-            job.restores += 1
-            w.restore(hwnd)
+            # Ask once to un-maximise, then only wait: a maximised window must not be moved,
+            # and its borders cannot be measured.
+            if not job.restore_asked:
+                job.restore_asked = True
+                log.info("explorer window opened maximised; restoring it before placing: %s", w.describe(hwnd))
+                if not w.restore(hwnd):
+                    log.warning("explorer window: could not be restored (error %s): %s", w.last_error(), w.describe(hwnd))
+                    return True
             self._later(hwnd, CHECK_MS)
             return False
         visible = w.visible_rect(hwnd) or window
         if close_enough(visible, target, TOLERANCE):
-            if job.moves:
-                self.placed += 1
-                log.info("explorer window placed in the slot %s after %d move(s): %s", target, job.moves, w.describe(hwnd))
+            if not job.in_slot:
+                job.in_slot = True
+                if job.moves:
+                    if not job.counted:
+                        job.counted = True
+                        self.placed += 1
+                    log.info("explorer window placed in the slot %s after %d move(s): %s", target, job.moves, w.describe(hwnd))
+                    self._later(hwnd, CONFIRM_MS)  # ...and one more look: did it stay?
+                    return False
+                log.info("explorer window opened in the slot %s by itself: %s", target, w.describe(hwnd))
             return True
+        job.in_slot = False
         if job.asked_from is not None and window == job.asked_from:
-            self._later(hwnd, CHECK_MS)  # Explorer has not carried out the last request yet: wait, do not pile up
+            # Explorer has not carried out the last request (yet): wait, do not pile up requests.
+            job.unchanged += 1
+            if job.moves >= 2 and job.unchanged >= REFUSED_AFTER:
+                log.warning("explorer window keeps its own size or place: visible frame %s, wanted %s; left as it is: %s",
+                            visible, target, w.describe(hwnd))
+                return True
+            self._later(hwnd, CHECK_MS)
             return False
         if job.moves >= MAX_MOVES:
-            log.warning("explorer window %s: visible frame %s after %d moves, wanted %s; left as it is",
-                        w.describe(hwnd), visible, job.moves, target)
+            log.warning("explorer window: visible frame %s after %d moves, wanted %s; left as it is: %s",
+                        visible, job.moves, target, w.describe(hwnd))
+            return True
+        if not w.move(hwnd, outer_rect(target, window, visible)):
+            log.warning("explorer window: Windows refused the move (error %s): %s", w.last_error(), w.describe(hwnd))
             return True
         job.moves += 1
+        job.unchanged = 0
         job.asked_from = window
-        w.move(hwnd, outer_rect(target, window, visible))
         self._later(hwnd, CHECK_MS)
         return False
 

@@ -18,12 +18,14 @@ BORDER = 7  # invisible resize border left/right/bottom
 
 
 class FakeWindow:
-    def __init__(self, rect, cls="CabinetWClass", maximized=False, minimized=False, visible=True):
+    def __init__(self, rect, cls="CabinetWClass", maximized=False, minimized=False, visible=True, cloak=0):
         self.rect = rect  # the window rectangle (with the invisible borders)
         self.cls = cls
         self.maximized = maximized
         self.minimized = minimized
         self.visible = visible
+        self.cloak = cloak  # 0 = on screen, 1 = cloaked by the program, 2 = by the shell (other virtual desktop)
+        self.refuse_moves = False  # SetWindowPos returns FALSE (e.g. an elevated window)
         self.pending = []  # requests Explorer has not carried out yet
         self.moves = 0
         self.restores = 0
@@ -55,8 +57,18 @@ class FakeWatcher:
     def refresh(self) -> None:
         self.refreshed += 1
 
-    def explorer_windows(self):
-        return [h for h, w in self.windows.items() if w.cls == "CabinetWClass"]
+    def open_explorer_windows(self):
+        return [h for h, w in self.windows.items()
+                if w.cls == "CabinetWClass" and w.visible and (w.cloak == 0 or w.cloak & 2)]
+
+    def describe_all(self):
+        return "\n".join(f"  0x{h:X} visible={w.visible} cloak={w.cloak}" for h, w in self.windows.items())
+
+    def is_cloaked(self, hwnd):
+        return self.windows[hwnd].cloak != 0
+
+    def last_error(self):
+        return 5
 
     def is_explorer_window(self, hwnd):
         return hwnd in self.windows and self.windows[hwnd].cls == "CabinetWClass"
@@ -85,10 +97,14 @@ class FakeWatcher:
     def restore(self, hwnd):
         self.windows[hwnd].pending.append(("restore", None))
         self._maybe_pump(hwnd)
+        return True
 
     def move(self, hwnd, rect):
+        if self.windows[hwnd].refuse_moves:
+            return False
         self.windows[hwnd].pending.append(("move", rect))
         self._maybe_pump(hwnd)
+        return True
 
     def mouse_button_down(self):
         return self.button_down
@@ -119,8 +135,12 @@ class FakeWatcher:
     def open(self, hwnd, rect=(93, 100, 907, 607), notify=True, **kw):
         self.windows[hwnd] = FakeWindow(rect, **kw)
         if notify and self.callback:
-            self.callback(hwnd)
+            self.callback(hwnd, True)
         return self.windows[hwnd]
+
+    def activate(self, hwnd):
+        if self.callback:
+            self.callback(hwnd, False)
 
 
 SLOT = {"enabled": True, "x": 300, "y": 120, "width": 900, "height": 600}
@@ -130,6 +150,7 @@ TARGET = (300, 120, 1200, 720)  # at 100 % native == logical
 @pytest.fixture
 def fast(monkeypatch):
     monkeypatch.setattr(explorer_placer, "CHECK_MS", 5)
+    monkeypatch.setattr(explorer_placer, "CONFIRM_MS", 10)
     monkeypatch.setattr(explorer_placer, "MOUSE_WAIT_MS", 5)
 
 
@@ -180,7 +201,7 @@ def test_windows_that_were_already_open_are_left_alone(qapp, home, fast):
     w = FakeWatcher()
     old = w.open(0x300)  # open before the feature starts
     placer, w, _ = make(home, watcher=w)
-    w.callback(0x300)  # even if Windows reports it again (e.g. after a virtual desktop switch)
+    w.callback(0x300, True)  # even if Windows reports it again (e.g. after a virtual desktop switch)
     settle()
     assert old.moves == 0
     new = w.open(0x301)
@@ -194,7 +215,7 @@ def test_a_window_is_placed_once_and_then_belongs_to_the_user(qapp, home, fast):
     win = w.open(0x400)
     settle()
     win.rect = (10, 10, 600, 500)  # the user drags it somewhere else
-    w.callback(0x400)  # a repeated notification changes nothing
+    w.callback(0x400, True)  # a repeated notification changes nothing
     settle()
     assert win.rect == (10, 10, 600, 500) and win.moves == 1
     placer.stop()
@@ -205,7 +226,7 @@ def test_a_closed_window_is_forgotten_so_a_reused_handle_is_placed_again(qapp, h
     w.open(0x500)
     settle()
     del w.windows[0x500]
-    w.open(0x999, cls="Notepad")  # any later event prunes closed windows
+    w.open(0x501)  # (handles come back only after very many other windows; any Explorer event forgets closed ones)
     again = w.open(0x500)
     settle()
     assert again.moves == 1
@@ -248,6 +269,124 @@ def test_a_maximised_window_is_restored_and_then_placed(qapp, home, fast):
     placer.stop()
 
 
+def test_a_maximised_window_of_a_slow_explorer_is_still_placed(qapp, home, fast):
+    """Explorer carries out the restore late (first window after start-up, busy PC): keep waiting."""
+    placer, w, _ = make(home)
+    w.responsive = False
+    win = w.open(0x801, rect=(-7, -7, 1927, 1047), maximized=True)
+    settle(60)  # many looks later...
+    assert len(win.pending) == 1 and win.pending[0][0] == "restore"  # asked once, nothing piled up, no move yet
+    w.responsive = True
+    w.pump(0x801)
+    settle()
+    assert not win.maximized and w.visible_rect(0x801) == TARGET
+    placer.stop()
+
+
+def test_a_window_explorer_keeps_hidden_is_placed_when_it_is_first_shown(qapp, home, fast):
+    """Windows 11 can keep an Explorer window ready in the background: it is not "open"."""
+    w = FakeWatcher()
+    hidden = w.open(0x810, visible=False)  # exists before the feature is switched on
+    placer, w, _ = make(home, watcher=w)
+    assert 0x810 not in placer._seen
+    hidden.visible = True
+    w.callback(0x810, True)  # shown: reported as a new window
+    settle()
+    assert w.visible_rect(0x810) == TARGET and hidden.moves == 1
+    placer.stop()
+
+
+def test_a_window_on_another_virtual_desktop_counts_as_open(qapp, home, fast):
+    w = FakeWatcher()
+    other_desktop = w.open(0x820, cloak=2)
+    placer, w, _ = make(home, watcher=w)
+    other_desktop.cloak = 0  # the user switches to that desktop and clicks the window
+    w.activate(0x820)
+    settle()
+    assert other_desktop.moves == 0
+    placer.stop()
+
+
+def test_a_cloaked_window_is_placed_only_once_it_is_on_screen(qapp, home, fast):
+    placer, w, _ = make(home)
+    win = w.open(0x830, cloak=1)  # reported while still cloaked
+    settle(40)
+    assert win.moves == 0  # never moved while it cannot be seen
+    win.cloak = 0  # ...uncloaked within the waiting time: placed without another notification
+    settle()
+    assert w.visible_rect(0x830) == TARGET and win.moves == 1
+    placer.stop()
+
+
+def test_a_window_that_stays_hidden_is_forgotten_and_placed_on_activation(qapp, home, fast):
+    placer, w, _ = make(home)
+    win = w.open(0x840, cloak=1)
+    settle(500)  # longer than the waiting time
+    assert win.moves == 0 and 0x840 not in placer._seen and not placer._jobs
+    win.cloak = 0
+    w.activate(0x840)  # the user opens it: Windows reports the activation
+    settle()
+    assert w.visible_rect(0x840) == TARGET and win.moves == 1
+    w.activate(0x840)  # later activations (every click on it) do nothing
+    win.rect = (10, 10, 600, 500)
+    w.activate(0x840)
+    settle()
+    assert win.rect == (10, 10, 600, 500) and win.moves == 1
+    placer.stop()
+
+
+def test_activating_a_window_that_was_already_open_does_nothing(qapp, home, fast):
+    w = FakeWatcher()
+    old = w.open(0x850)
+    placer, w, _ = make(home, watcher=w)
+    for _ in range(3):
+        w.activate(0x850)
+    settle()
+    assert old.moves == 0
+    placer.stop()
+
+
+def test_a_refused_move_ends_quietly(qapp, home, fast, caplog):
+    placer, w, _ = make(home)
+    win = w.open(0x860, notify=False)
+    win.refuse_moves = True  # e.g. an Explorer started "as administrator"
+    w.callback(0x860, True)
+    settle()
+    assert win.moves == 0 and not placer._jobs
+    assert any("refused the move" in r.message for r in caplog.records)
+    placer.stop()
+
+
+def test_a_window_that_keeps_its_own_size_is_left_after_two_tries(qapp, home, fast, caplog):
+    """A slot smaller than the window's minimum size: the same result every time."""
+    placer, w, _ = make(home)
+    win = w.open(0x870, notify=False)
+
+    def minimum_size(window):
+        l, t, r, b = window.rect
+        window.rect = (l, t, max(r, l + 1100), max(b, t + 800))
+        window.after_move = minimum_size
+
+    win.after_move = minimum_size
+    w.callback(0x870, True)
+    settle(250)
+    assert win.moves == 2 and not placer._jobs  # asked twice, then left alone - not 40 idle looks
+    assert any("keeps its own size" in r.message for r in caplog.records)
+    placer.stop()
+
+
+def test_a_late_change_after_the_window_sat_in_the_slot_is_corrected_once(qapp, home, fast):
+    """E.g. the window resizes itself for another monitor's scale a moment after the move."""
+    placer, w, _ = make(home)
+    win = w.open(0x880)
+    assert w.visible_rect(0x880) == TARGET  # the first look already found it in the slot...
+    l, t, r, b = win.rect
+    win.rect = (l, t, r + 150, b + 100)  # ...then it changes by itself
+    settle()
+    assert w.visible_rect(0x880) == TARGET and win.moves == 2 and placer.placed == 1
+    placer.stop()
+
+
 def test_a_minimised_window_is_left_alone(qapp, home, fast):
     placer, w, _ = make(home)
     win = w.open(0x900, minimized=True)
@@ -266,7 +405,7 @@ def test_crossing_to_a_monitor_with_another_scale_is_corrected(qapp, home, fast)
         window.rect = (l, t, l + int((r - l) * 1.25), t + int((b - t) * 1.25))
 
     win.after_move = dpi_change
-    w.callback(0xA00)
+    w.callback(0xA00, True)
     settle()
     assert w.visible_rect(0xA00) == TARGET and win.moves == 2
     placer.stop()
@@ -296,7 +435,7 @@ def test_a_window_that_will_not_fit_is_given_up_after_a_few_moves(qapp, home, fa
         window.after_move = refuse
 
     win.after_move = refuse
-    w.callback(0xC00)
+    w.callback(0xC00, True)
     settle(200)
     assert win.moves == explorer_placer.MAX_MOVES  # bounded: no endless tug of war
     assert placer.placed == 0 and not placer._jobs

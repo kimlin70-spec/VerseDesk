@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import platform
 import sys
 
@@ -24,6 +25,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     ap.add_argument("--version", action="store_true", help="print the version and exit")
     ap.add_argument("--edit-mode", action="store_true", help=argparse.SUPPRESS)  # automated checks only
     ap.add_argument("--open-verse-editor", action="store_true", help=argparse.SUPPRESS)  # automated checks only
+    ap.add_argument("--exit-file", default=None, help=argparse.SUPPRESS)  # automated checks: quit when this file appears
     # parse_known_args: never die because of an unexpected argument (e.g. from a shortcut)
     args, _unknown = ap.parse_known_args(argv)
     return args
@@ -106,6 +108,11 @@ def main(argv: list[str] | None = None) -> int:
             QTimer.singleShot(500, controller.open_verse_editor)
         if args.exit_after is not None:
             QTimer.singleShot(int(max(0.0, args.exit_after) * 1000), controller.quit)
+        if args.exit_file:  # automated checks: quit (the normal way) as soon as the file appears
+            exit_watch = QTimer()
+            exit_watch.setInterval(500)
+            exit_watch.timeout.connect(lambda: os.path.exists(args.exit_file) and controller.quit())
+            exit_watch.start()
         code = qapp.exec()
         log.info("event loop finished (code %s)", code)
         instance.release()
