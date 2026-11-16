@@ -73,6 +73,7 @@ def make_app(qapp, home, embedded, when, autostart=None):
 def shutdown(app):
     if app._editor is not None:
         app._editor.close()
+    app.explorer.stop()
     app.rotation.stop()
     app._poll.stop()
     app.layer.stop()
@@ -236,6 +237,7 @@ def test_tray_menu_items(qapp, home, embedded):
         assert texts[0].startswith("배치 편집")
         assert any("새 구역" in t for t in texts)
         assert any("말씀 목록 편집" in t for t in texts)
+        assert "탐색기 창 자리 고정" in texts and app.tray.act_explorer_slot.isChecked() is False
         assert any("자동 실행" in t for t in texts)
         assert texts[-1] == "종료"
         app.tray.edit_mode_toggled.emit(True)
@@ -561,5 +563,58 @@ def test_a_read_only_spare_copy_does_not_block_saving(qapp, home, embedded):
         assert os.stat(previous).st_mode & stat.S_IWRITE  # the new copy does not inherit read-only
         saved = json.loads(paths.user_verses_path().read_text(encoding="utf-8"))["verses"]
         assert len(saved) == _builtin_count(app) - 2
+    finally:
+        shutdown(app)
+
+
+def test_explorer_slot_is_off_until_switched_on_and_then_shows_its_frame(qapp, home, embedded):
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        assert app.store.settings.explorer_window.enabled is False
+        assert app.explorer._frame is None  # nothing of the feature exists while it is off
+        app.set_edit_mode(True)
+        assert app.explorer._frame is None
+        app.set_edit_mode(False)
+
+        app.tray.explorer_slot_toggled.emit(True)  # first time: the frame appears so the place can be chosen
+        saved = json.loads((home / "settings.json").read_text(encoding="utf-8"))["explorer_window"]
+        assert saved["enabled"] is True and saved["x"] is None
+        assert app.edit_mode is True and app.explorer._frame.isVisible()
+        assert app.tray.act_explorer_slot.isChecked() is True
+
+        frame = app.explorer._frame
+        frame.setGeometry(40, 90, 600, 400)  # (the test screen is 800x800)
+        frame.geometry_edited.emit(40, 90, 600, 400)
+        saved = json.loads((home / "settings.json").read_text(encoding="utf-8"))["explorer_window"]
+        assert (saved["x"], saved["y"], saved["width"], saved["height"]) == (40, 90, 600, 400)
+
+        app.set_edit_mode(False)
+        assert not frame.isVisible()
+
+        app.tray.explorer_slot_toggled.emit(False)
+        assert json.loads((home / "settings.json").read_text(encoding="utf-8"))["explorer_window"]["enabled"] is False
+        app.set_edit_mode(True)
+        assert not frame.isVisible()  # switched off: no frame in edit mode
+        app.set_edit_mode(False)
+
+        app.tray.explorer_slot_toggled.emit(True)  # a place is already chosen: edit mode is not forced again
+        assert app.edit_mode is False
+    finally:
+        shutdown(app)
+
+
+def test_explorer_slot_follows_settings_json_edited_outside(qapp, home, embedded):
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        path = home / "settings.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["explorer_window"] = {"enabled": True, "x": 50, "y": 60, "width": 600, "height": 400}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        _touch_later(path)
+        app._poll_files()
+        assert app.tray.act_explorer_slot.isChecked() is True
+        app.set_edit_mode(True)
+        g = app.explorer._frame.geometry()
+        assert (g.x(), g.y(), g.width(), g.height()) == (50, 60, 600, 400)
     finally:
         shutdown(app)

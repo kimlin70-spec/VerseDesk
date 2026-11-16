@@ -52,6 +52,14 @@ SWP_NOZORDER = 0x0004
 SWP_NOACTIVATE = 0x0010
 SWP_NOOWNERZORDER = 0x0200
 SWP_NOSENDCHANGING = 0x0400  # our own z-order moves bypass WM_WINDOWPOSCHANGING (and our veto)
+SWP_ASYNCWINDOWPOS = 0x4000  # post the request to the window's own thread: never wait for another program
+
+SW_SHOWNOACTIVATE = 4  # back to the normal (not maximised) size without activating
+
+HSHELL_WINDOWCREATED = 1  # shell hook: a top-level application window appeared
+VK_LBUTTON = 0x01
+VK_RBUTTON = 0x02
+SM_SWAPBUTTON = 23
 
 HWND_TOP = 0
 HWND_BOTTOM = 1
@@ -65,6 +73,7 @@ EVENT_SYSTEM_MINIMIZEEND = 0x0017
 WINEVENT_OUTOFCONTEXT = 0x0000
 WINEVENT_SKIPOWNPROCESS = 0x0002
 
+DWMWA_EXTENDED_FRAME_BOUNDS = 9
 DWMWA_EXCLUDED_FROM_PEEK = 12
 DWMWA_CLOAKED = 14
 
@@ -162,6 +171,14 @@ CreateWindowExW = _proto(
     wintypes.LPVOID,
 )
 DestroyWindow = _proto(user32.DestroyWindow, wintypes.BOOL, HWND)
+EnumWindows = _proto(user32.EnumWindows, wintypes.BOOL, WNDENUMPROC, wintypes.LPARAM)
+IsZoomed = _proto(user32.IsZoomed, wintypes.BOOL, HWND)
+ShowWindowAsync = _proto(user32.ShowWindowAsync, wintypes.BOOL, HWND, ctypes.c_int)
+RegisterWindowMessageW = _proto(user32.RegisterWindowMessageW, wintypes.UINT, wintypes.LPCWSTR)
+RegisterShellHookWindow = _proto(user32.RegisterShellHookWindow, wintypes.BOOL, HWND)
+DeregisterShellHookWindow = _proto(user32.DeregisterShellHookWindow, wintypes.BOOL, HWND)
+GetAsyncKeyState = _proto(user32.GetAsyncKeyState, ctypes.c_short, ctypes.c_int)
+GetSystemMetrics = _proto(user32.GetSystemMetrics, ctypes.c_int, ctypes.c_int)
 GetModuleHandleW = _proto(kernel32.GetModuleHandleW, wintypes.HMODULE, wintypes.LPCWSTR)
 if dwmapi is not None:
     DwmSetWindowAttribute = _proto(
@@ -214,6 +231,30 @@ def window_rect(hwnd: int) -> tuple[int, int, int, int]:
     if not GetWindowRect(hwnd, ctypes.byref(r)):
         return (0, 0, 0, 0)
     return (r.left, r.top, r.right, r.bottom)
+
+
+def frame_bounds(hwnd: int) -> tuple[int, int, int, int] | None:
+    """What is *seen* of a window (DWM's extended frame bounds, native pixels): the window
+    rectangle without the invisible resize borders. None when DWM cannot tell."""
+    if DwmGetWindowAttribute is None:
+        return None
+    r = wintypes.RECT()
+    hr = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, ctypes.byref(r), ctypes.sizeof(r))
+    if hr != 0 or r.right <= r.left or r.bottom <= r.top:
+        return None
+    return (r.left, r.top, r.right, r.bottom)
+
+
+def top_level_windows() -> list[int]:
+    out: list[int] = []
+
+    @WNDENUMPROC
+    def collect(hwnd, _lparam):
+        out.append(h(hwnd))
+        return True
+
+    EnumWindows(collect, 0)
+    return out
 
 
 def ex_style(hwnd: int) -> int:

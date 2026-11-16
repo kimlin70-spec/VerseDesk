@@ -20,7 +20,8 @@ File layout (all keys optional; anything missing or invalid falls back to the de
         "align": "right",              # left | center | right
         "interval_minutes": 120        # the next verse of the list every N minutes (1440 = daily)
       },
-      "zones": [ ... ]                 # folder zones, see versedesk/zones.py
+      "zones": [ ... ],                # folder zones, see versedesk/zones.py
+      "explorer_window": { ... }       # fixed place for new Explorer windows, see versedesk/explorer_slot.py
     }
 
 Unknown top-level keys (for example ones written by a newer version) are kept as-is.
@@ -39,6 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from versedesk.explorer_slot import SlotSettings, slot_from_dict, slot_to_dict
 from versedesk.rotation import DEFAULT_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES, MIN_INTERVAL_MINUTES
 from versedesk.zones import Zone, zones_from_list, zones_to_list
 
@@ -81,6 +83,7 @@ class Settings:
     debug_log: bool = False
     verse: VerseSettings = field(default_factory=VerseSettings)
     zones: list[Zone] = field(default_factory=list)
+    explorer_window: SlotSettings = field(default_factory=SlotSettings)
     extra: dict[str, Any] = field(default_factory=dict)  # unknown keys, preserved verbatim
 
     def copy(self) -> "Settings":
@@ -141,7 +144,7 @@ def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Set
         warnings.append("settings.json top level is not an object; keeping the previous settings")
         return prev, warnings
 
-    known = {"version", "autostart", "desktop_mode", "debug_log", "verse", "zones"}
+    known = {"version", "autostart", "desktop_mode", "debug_log", "verse", "zones", "explorer_window"}
     s.extra = {k: copy.deepcopy(v) for k, v in data.items() if k not in known}
 
     if "autostart" in data:
@@ -217,6 +220,9 @@ def settings_from_dict(data: Any, previous: Settings | None = None) -> tuple[Set
         else:
             s.zones = [z.copy() for z in prev.zones]
             warnings.append("zones must be a list; keeping the previous zones")
+
+    s.explorer_window, slot_warnings = slot_from_dict(data.get("explorer_window"), prev.explorer_window)
+    warnings.extend(slot_warnings)
     return s, warnings
 
 
@@ -246,6 +252,7 @@ def settings_to_dict(s: Settings) -> dict[str, Any]:
             "interval_minutes": vs.interval_minutes,
         },
         "zones": zones_to_list(s.zones),
+        "explorer_window": slot_to_dict(s.explorer_window),
     }
     for k, val in s.extra.items():
         out.setdefault(k, copy.deepcopy(val))

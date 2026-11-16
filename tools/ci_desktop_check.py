@@ -28,7 +28,12 @@ the user cannot easily test one by one:
     right-click menu, double-click opens a folder in Explorer, collapse/expand is saved;
   * the verse list editor (말씀 목록 편집) is a normal window; a reference typed with
     real keyboard input ("요 8:12" + Enter) is looked up in the built-in BSB and saved to
-    verses.json; closing the window leaves the app running.
+    verses.json; closing the window leaves the app running;
+  * the Explorer window slot (탐색기 창 자리 고정): off = Explorer windows are left alone;
+    on = a newly opened Explorer window's visible frame lands exactly on the slot, a window
+    that was already open and a window moved afterwards are not touched, a changed slot is
+    used at once, a window that opens maximised is put into the slot; in edit mode the
+    frame can be dragged and resized with the mouse and the new place is saved.
 Screenshots and the app's log are written to the report folder (uploaded as an artifact).
 The exit code is 1 if a required check fails.  Checks that depend on the CI machine's
 shell (Win+D, explorer restart) report WARN instead of FAIL when the shell itself does
@@ -124,6 +129,8 @@ class INPUT(ctypes.Structure):
 user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 user32.ClientToScreen.restype = wintypes.BOOL
+user32.IsZoomed.argtypes = [wintypes.HWND]
+user32.IsZoomed.restype = wintypes.BOOL
 user32.SendInput.restype = wintypes.UINT
 INPUT_KEYBOARD, KEYEVENTF_UNICODE, VK_RETURN = 1, 0x0004, 0x0D
 
@@ -754,6 +761,231 @@ def check_verse_editor(exe: Path, appdata: Path, report: Path) -> None:
         expect("verse editor: the app quits cleanly", code == 0, f"exit code {code}")
 
 
+# ----------------------------------------------------------------------------- explorer window slot
+
+SLOT_FRAME_TITLE = "VerseDesk Explorer Slot"
+EXPLORER_CLASS = "CabinetWClass"
+SW_MAXIMIZE = 3
+
+
+def explorer_windows() -> list[int]:
+    return [w for w in top_level_windows() if api.class_name(w) == EXPLORER_CLASS and api.IsWindowVisible(w)]
+
+
+def seen_rect(hwnd: int) -> tuple[int, int, int, int]:
+    """What is seen of the window (without the invisible resize borders)."""
+    return api.frame_bounds(hwnd) or api.window_rect(hwnd)
+
+
+def near(a, b, tolerance: int = 2) -> bool:
+    return all(abs(p - q) <= tolerance for p, q in zip(a, b))
+
+
+def open_folder(path: Path, timeout: float = 30.0) -> int:
+    """Open ``path`` in Explorer; the new window's handle, or 0 if no new window appeared
+    (newer Windows 11 builds can open a folder as a tab of a window that is already open)."""
+    before = set(explorer_windows())
+    subprocess.Popen(["explorer.exe", str(path)])
+    new = wait_for(lambda: [w for w in explorer_windows() if w not in before], timeout=timeout, step=0.1)
+    return new[0] if new else 0
+
+
+def close_windows(windows) -> None:
+    for w in windows:
+        if w and api.IsWindow(w):
+            user32.PostMessageW(w, 0x0010, 0, 0)  # WM_CLOSE
+    wait_for(lambda: not any(w and api.IsWindow(w) and api.IsWindowVisible(w) for w in windows), timeout=10)
+    time.sleep(1.0)  # let Explorer write down where the window was
+
+
+def set_slot(appdata: Path, **slot) -> None:
+    path = appdata / "settings.json"
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data["explorer_window"] = slot
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def saved_slot(appdata: Path) -> dict:
+    try:
+        return json.loads((appdata / "settings.json").read_text(encoding="utf-8")).get("explorer_window", {})
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def slot_log_lines(appdata: Path) -> None:
+    try:
+        for line in (appdata / "log.txt").read_text(encoding="utf-8", errors="replace").splitlines():
+            if "explorer window" in line:
+                print("  app log: " + line[-260:], flush=True)
+    except OSError:
+        pass
+
+
+def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
+    """탐색기 창 자리 고정 on the real desktop (the screen is at 100 %, so settings = native pixels)."""
+    base = Path(os.environ.get("TEMP", str(report))) / "VerseDeskCI-slot"
+    shutil.rmtree(base, ignore_errors=True)
+    folders = []
+    for name in ("Slot A", "Slot B", "Slot C", "Slot D", "Slot E"):
+        (base / name).mkdir(parents=True)
+        folders.append(base / name)
+    close_windows(explorer_windows())
+
+    set_slot(appdata, enabled=False)
+    proc = subprocess.Popen([str(exe), "--exit-after", "150"])
+    opened: list[int] = []
+    try:
+        if not expect("explorer slot: the app starts", bool(find_window(VERSE_TITLE, 60))):
+            return
+        time.sleep(3)
+        minimize_consoles()
+
+        # Feature off: Explorer decides where its window goes, and it stays there.
+        w0 = open_folder(folders[0])
+        opened.append(w0)
+        if not expect("explorer slot: an Explorer window can be opened on this machine", bool(w0)):
+            return
+        time.sleep(3)
+        natural = seen_rect(w0)
+        time.sleep(2)
+        expect("explorer slot: while the feature is off, Explorer windows are left alone",
+               seen_rect(w0) == natural, f"at {natural}, later {seen_rect(w0)}")
+
+        # Two slots that differ from each other and from where Explorer put its window itself.
+        slot1 = dict(x=260, y=90, width=620, height=440)
+        slot2 = dict(x=330, y=60, width=560, height=500)
+        if near(natural, (260, 90, 880, 530), 30):
+            slot1 = dict(x=120, y=200, width=700, height=420)
+        rect1 = (slot1["x"], slot1["y"], slot1["x"] + slot1["width"], slot1["y"] + slot1["height"])
+        rect2 = (slot2["x"], slot2["y"], slot2["x"] + slot2["width"], slot2["y"] + slot2["height"])
+
+        # Switched on while w0 is open (settings.json is re-read within 2 s).
+        set_slot(appdata, enabled=True, **slot1)
+        time.sleep(5)
+        expect("explorer slot: a window that was already open is not moved when the feature is switched on",
+               seen_rect(w0) == natural, f"was {natural}, now {seen_rect(w0)}")
+
+        w1 = open_folder(folders[1], timeout=20)
+        if not w1:
+            record("explorer slot: a second folder opens in its own window", "SKIP",
+                   "no new window (opened as a tab of the first one); closing the first and trying again")
+            close_windows([w0])
+            w1 = open_folder(folders[1])
+        opened.append(w1)
+        if not expect("explorer slot: a new Explorer window appears", bool(w1)):
+            return
+        placed = wait_for(lambda: near(seen_rect(w1), rect1), timeout=10, step=0.1)
+        time.sleep(1.5)  # ...and it must stay there
+        expect("explorer slot: a new Explorer window opens exactly in the slot",
+               bool(placed) and near(seen_rect(w1), rect1),
+               f"slot {rect1}, visible frame {seen_rect(w1)}, window rect {api.window_rect(w1)}")
+        screenshot(report, "08-explorer-slot")
+        if api.IsWindow(w0):
+            expect("explorer slot: the window that was already open is still where it was",
+                   seen_rect(w0) == natural, f"was {natural}, now {seen_rect(w0)}")
+        expect("explorer slot: the window keeps its normal state (not maximised or minimised)",
+               not user32.IsZoomed(w1) and not api.IsIconic(w1))
+
+        # The user moves the window afterwards: it is theirs now.
+        api.SetWindowPos(w1, None, 40, 300, 520, 380, api.SWP_NOZORDER | api.SWP_NOACTIVATE)
+        time.sleep(0.5)
+        moved = seen_rect(w1)
+        time.sleep(3)
+        expect("explorer slot: a window moved afterwards stays where it was put",
+               seen_rect(w1) == moved and not near(moved, rect1), f"moved to {moved}, later {seen_rect(w1)}")
+
+        # A changed slot is used for the next window (so it is not just Explorer's own memory).
+        close_windows([w0, w1])
+        set_slot(appdata, enabled=True, **slot2)
+        time.sleep(5)
+        w2 = open_folder(folders[2])
+        opened.append(w2)
+        placed = bool(w2) and wait_for(lambda: near(seen_rect(w2), rect2), timeout=10, step=0.1)
+        time.sleep(1.5)
+        expect("explorer slot: after the slot was changed, the next window opens in the new slot",
+               bool(placed) and near(seen_rect(w2), rect2),
+               f"slot {rect2}, visible frame {seen_rect(w2) if w2 else None}")
+
+        # A window that opens maximised (Explorer remembers how the last one was closed).
+        if w2:
+            user32.ShowWindow(w2, SW_MAXIMIZE)
+            time.sleep(1.5)
+            close_windows([w2])
+        w3 = open_folder(folders[3])
+        opened.append(w3)
+        placed = bool(w3) and wait_for(lambda: near(seen_rect(w3), rect2) and not user32.IsZoomed(w3),
+                                       timeout=10, step=0.1)
+        time.sleep(1.5)
+        expect("explorer slot: a window that opens maximised is put into the slot too",
+               bool(placed) and near(seen_rect(w3), rect2) and not user32.IsZoomed(w3),
+               f"slot {rect2}, visible frame {seen_rect(w3) if w3 else None}, "
+               f"maximised={bool(w3 and user32.IsZoomed(w3))}")
+
+        # Switched off again: the next window is not sent to the (now different) slot.
+        close_windows([w3])
+        set_slot(appdata, enabled=False, **slot1)
+        time.sleep(5)
+        w4 = open_folder(folders[4])
+        opened.append(w4)
+        time.sleep(4)
+        expect("explorer slot: switched off again, new windows are left alone",
+               bool(w4) and not near(seen_rect(w4), rect1), f"slot {rect1}, window at {seen_rect(w4) if w4 else None}")
+        slot_log_lines(appdata)
+    finally:
+        close_windows([w for w in opened if w])
+        try:
+            code = proc.wait(timeout=200)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            code = None
+        expect("explorer slot: the app quits cleanly", code == 0, f"exit code {code}")
+
+    # 배치 편집: the frame shows the slot, can be dragged and resized, and the place is saved.
+    set_slot(appdata, enabled=True, x=200, y=150, width=520, height=360)
+    proc = subprocess.Popen([str(exe), "--edit-mode", "--exit-after", "45"])
+    try:
+        frame = find_window(SLOT_FRAME_TITLE, 60)
+        if not expect("explorer slot: in edit mode the frame appears", bool(frame) and bool(api.IsWindowVisible(frame))):
+            return
+        time.sleep(3)
+        minimize_consoles()
+        ex = api.ex_style(frame)
+        expect("explorer slot: the frame is where the slot is", near(api.window_rect(frame), (200, 150, 720, 510), 1),
+               f"{api.window_rect(frame)}")
+        expect("explorer slot: the frame floats above other windows and stays out of the taskbar and Alt+Tab",
+               bool(ex & api.WS_EX_TOPMOST) and bool(ex & api.WS_EX_TOOLWINDOW), flags_text(ex))
+        verse = find_window(VERSE_TITLE, 5)
+        if verse:
+            expect("explorer slot: the frame does not disturb the verse on the desktop",
+                   check_placement(verse, find_desktop_host())[0])
+        screenshot(report, "09-explorer-slot-frame")
+        drag(200 + 60, 150 + 40, 90, 50)
+        time.sleep(1.5)
+        expect("explorer slot: dragging the frame moves it", near(api.window_rect(frame), (290, 200, 810, 560), 3),
+               f"{api.window_rect(frame)}")
+        s = saved_slot(appdata)
+        l, t, r, b = api.window_rect(frame)
+        expect("explorer slot: the new place is saved in settings.json",
+               near((s.get("x") or 0, s.get("y") or 0, s.get("width") or 0, s.get("height") or 0),
+                    (l, t, r - l, b - t), 1), f"settings {s}, frame {(l, t, r, b)}")
+        drag(r - 6, b - 6, 60, 40)
+        time.sleep(1.5)
+        l2, t2, r2, b2 = api.window_rect(frame)
+        expect("explorer slot: dragging the corner resizes the frame",
+               near((l2, t2), (l, t), 1) and near((r2 - r, b2 - b), (60, 40), 3), f"{(l, t, r, b)} -> {(l2, t2, r2, b2)}")
+        s = saved_slot(appdata)
+        expect("explorer slot: the new size is saved in settings.json",
+               near((s.get("width") or 0, s.get("height") or 0), (r2 - l2, b2 - t2), 1), f"settings {s}")
+    finally:
+        try:
+            code = proc.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            code = None
+        expect("explorer slot: the edit-mode run quits cleanly", code == 0, f"exit code {code}")
+        set_slot(appdata, enabled=False)
+
+
 def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
 
@@ -1077,6 +1309,9 @@ def run(exe: Path, report: Path) -> None:
 
     # 말씀 목록 편집 (verse list editor).
     check_verse_editor(exe, appdata, report)
+
+    # 탐색기 창 자리 고정 (Explorer window slot).
+    check_explorer_slot(exe, appdata, report)
 
     log = appdata / "log.txt"
     if log.exists():

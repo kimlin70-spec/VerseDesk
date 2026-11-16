@@ -43,6 +43,7 @@ def test_round_trip_preserves_everything_including_unknown_keys():
         "zones": [{"id": "z1", "name": "Work", "x": 10, "y": 20, "width": 300, "height": 200,
                    "collapsed": True, "items": ["C:\\Docs", "\\\\server\\share\\plan.xlsx"],
                    "color": "#112233"}],
+        "explorer_window": {"enabled": True, "x": 300, "y": 120, "width": 1000, "height": 700},
         "future_feature": {"enabled": True, "list": [1, 2]},
     }
     s, warnings = settings_from_dict(data)
@@ -295,3 +296,12 @@ def test_utf16_file_with_a_stray_odd_byte_does_not_stop_the_app(tmp_path):
     path.write_bytes(json.dumps({"verse": {"font_size": 28}}).encode("utf-16") + b"\n")
     r = SettingsStore(path).load()
     assert r.settings.verse.font_size in (28, VerseSettings().font_size)  # read, or reported
+
+
+def test_explorer_window_slot_defaults_and_bad_values():
+    s, warnings = settings_from_dict({})
+    assert warnings == [] and s.explorer_window.enabled is False and not s.explorer_window.has_position
+    s, warnings = settings_from_dict({"explorer_window": {"enabled": "on", "width": 10}})
+    assert len(warnings) == 2 and s.explorer_window.enabled is False and s.explorer_window.width == 900
+    assert settings_to_dict(Settings())["explorer_window"] == {
+        "enabled": False, "x": None, "y": None, "width": 900, "height": 600}

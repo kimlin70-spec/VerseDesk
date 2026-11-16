@@ -16,6 +16,7 @@ TEXT_ADD_ZONE = "새 구역 추가"
 TEXT_ADD_ZONE_LATER = "새 구역 추가 (다음 단계에서 제공)"
 TEXT_AUTOSTART = "Windows 시작 시 자동 실행"
 TEXT_AUTOSTART_DEV = "Windows 시작 시 자동 실행 (exe에서만 가능)"
+TEXT_EXPLORER_SLOT = "탐색기 창 자리 고정"
 TEXT_OPEN_FOLDER = "설정·로그 폴더 열기"
 TEXT_EDIT_VERSES = "말씀 목록 편집…"
 TEXT_QUIT = "종료"
@@ -27,6 +28,7 @@ class TrayController(QObject):
     autostart_toggled = Signal(bool)
     open_folder_requested = Signal()
     edit_verses_requested = Signal()
+    explorer_slot_toggled = Signal(bool)
     quit_requested = Signal()
 
     def __init__(self, icon: QIcon, autostart_supported: bool, zones_available: bool = False, parent=None):
@@ -55,6 +57,11 @@ class TrayController(QObject):
         self.act_autostart.triggered.connect(lambda checked: self.autostart_toggled.emit(bool(checked)))
         self.menu.addAction(self.act_autostart)
 
+        self.act_explorer_slot = QAction(TEXT_EXPLORER_SLOT, self.menu)
+        self.act_explorer_slot.setCheckable(True)
+        self.act_explorer_slot.triggered.connect(lambda checked: self.explorer_slot_toggled.emit(bool(checked)))
+        self.menu.addAction(self.act_explorer_slot)
+
         self.act_folder = QAction(TEXT_OPEN_FOLDER, self.menu)
         self.act_folder.triggered.connect(self.open_folder_requested.emit)
         self.menu.addAction(self.act_folder)
@@ -81,6 +88,9 @@ class TrayController(QObject):
 
     def set_autostart_checked(self, on: bool) -> None:
         self.act_autostart.setChecked(on)
+
+    def set_explorer_slot_checked(self, on: bool) -> None:
+        self.act_explorer_slot.setChecked(on)
 
     def set_tooltip(self, text: str) -> None:
         self.tray.setToolTip(text[:120])  # Windows truncates tray tooltips (~128 chars)

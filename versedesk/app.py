@@ -19,6 +19,8 @@ from PySide6.QtWidgets import QApplication
 from versedesk import paths
 from versedesk.autostart import Autostart
 from versedesk.desktop_layer import create_desktop_layer
+from versedesk.explorer_placer import ExplorerPlacer, create_explorer_watcher
+from versedesk.explorer_slot import ScreenInfo
 from versedesk.geometry import Rect, place_on_screens, top_right
 from versedesk.rotation import RotationClock, interval_label, verse_index
 from versedesk.settings import LoadResult, SettingsStore, atomic_write_text
@@ -146,6 +148,17 @@ class VerseDeskApp(QObject):
         )
         self.tray.add_zone_requested.connect(self._add_zone)
 
+        # a fixed place for new Explorer windows (off unless the user switches it on)
+        self.explorer = ExplorerPlacer(
+            store,
+            work_areas=self._screen_rects,
+            screens=self._screen_infos,
+            apply_reload=self._apply_reload,
+            watcher=create_explorer_watcher(),
+            parent=self,
+        )
+        self.tray.explorer_slot_toggled.connect(self.set_explorer_slot)
+
         # timers
         self.rotation = RotationClock(self._on_rotation, store.settings.verse.interval_minutes, now=now)
         self._poll = QTimer(self)
@@ -192,6 +205,8 @@ class VerseDeskApp(QObject):
         self.verse_widget.show()
         self.zones.start()
         self.layer.start()
+        self.tray.set_explorer_slot_checked(self.store.settings.explorer_window.enabled)
+        self.explorer.start()
 
         self.rotation.start()
         self._poll.start()
@@ -218,6 +233,7 @@ class VerseDeskApp(QObject):
             self._editor.close()
         self.layer.stop()
         self.zones.stop()
+        self.explorer.stop()
         self.tray.hide()
         self.verse_widget.hide()
         self.qapp.quit()
@@ -235,6 +251,7 @@ class VerseDeskApp(QObject):
         g = self.verse_widget.geometry()
         lines.append(f"verse widget at {g.getRect()} on screen {self.verse_widget.screen().name()!r}")
         lines.append(self.zones.diagnostics())
+        lines.append(self.explorer.diagnostics())
         lines.append(self.layer.diagnostics())
         log.info("\n".join(lines))
 
@@ -468,6 +485,12 @@ class VerseDeskApp(QObject):
             prim = Rect(0, 0, 1280, 720)
         return rects, prim
 
+    def _screen_infos(self) -> list[ScreenInfo]:
+        """Every screen's whole area (logical pixels) and scale factor, the main screen first."""
+        primary = QGuiApplication.primaryScreen()
+        screens = sorted(QGuiApplication.screens(), key=lambda s: s is not primary)
+        return [ScreenInfo(_to_rect(s.geometry()), float(s.devicePixelRatio())) for s in screens]
+
     def _position_verse(self) -> None:
         w = self.verse_widget
         vs = self.store.settings.verse
@@ -539,6 +562,7 @@ class VerseDeskApp(QObject):
             log.info("verse window was hidden by a screen change; showing it again")
             self.verse_widget.show()
         self.zones.reposition()
+        self.explorer.reposition()
         self.layer.request_sync()
 
     # ------------------------------------------------------------------ edit mode, autostart, folder
@@ -549,6 +573,7 @@ class VerseDeskApp(QObject):
         self.verse_widget.set_edit_mode(on)
         self.layer.set_click_through(self.verse_widget, not on)
         self.zones.set_edit_mode(on)
+        self.explorer.set_edit_mode(on)
         self.tray.set_edit_mode(on)
         log.info("edit mode %s", "on" if on else "off")
 
@@ -568,6 +593,28 @@ class VerseDeskApp(QObject):
         self._apply_reload(self.store.update(mutate))
         if not ok:
             self.tray.notify("자동 실행", "자동 실행 설정을 바꾸지 못했습니다. log.txt를 확인해 주세요.", warning=True)
+
+    @safe
+    def set_explorer_slot(self, on: bool) -> None:
+        """Tray: 탐색기 창 자리 고정. New Explorer windows open in the slot while it is on."""
+        choose_place = on and not self.store.settings.explorer_window.has_position
+
+        def mutate(s):
+            s.explorer_window.enabled = on
+
+        self._apply_reload(self.store.update(mutate))
+        self.explorer.sync_from_settings()
+        self.tray.set_explorer_slot_checked(self.store.settings.explorer_window.enabled)
+        log.info("explorer window slot switched %s", "on" if on else "off")
+        if choose_place:
+            self.set_edit_mode(True)  # the frame appears, so the place can be chosen right away
+            self.tray.notify(
+                "탐색기 창 자리 고정",
+                "화면에 나타난 파란 틀이 탐색기 창이 열릴 자리입니다. 틀을 끌어서 옮기고 오른쪽 아래 모서리로 "
+                "크기를 정한 뒤, 트레이 메뉴에서 '배치 편집 끄기'를 누르세요.",
+            )
+        elif on:
+            self.tray.notify("탐색기 창 자리 고정", "새로 여는 탐색기 창이 정해 둔 자리에 열립니다. 자리를 바꾸려면 '배치 편집'을 켜세요.")
 
     @safe
     def open_data_folder(self) -> None:
@@ -618,3 +665,5 @@ class VerseDeskApp(QObject):
         if self.autostart.supported and s.autostart != self.autostart.is_enabled():
             self.tray.set_autostart_checked(self.autostart.sync_at_startup(s.autostart))
         self.zones.sync_from_settings()
+        self.tray.set_explorer_slot_checked(s.explorer_window.enabled)
+        self.explorer.sync_from_settings()
