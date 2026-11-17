@@ -110,6 +110,31 @@ def test_the_anchor_fallback_never_climbs_into_the_topmost_band(env):
     layer.stop()
 
 
+def test_a_refused_anchor_that_vanishes_never_sends_the_widget_to_hwnd_top(env):
+    """HWND_TOP would put the widget above every app window - the very thing the fallback avoids."""
+    wm, d = env
+    prog, app, other, layer = _scene(wm, d)
+    entry = next(iter(layer._pinned.values()))
+    ime = wm.new("IME", visible=False, top=False)
+    wm.z.remove(ime)
+    wm.z.insert(wm.z.index(prog), ime)  # a hidden foreign window right above the desktop...
+    wm.refused_anchors.add(ime)
+    real = wm.set_window_pos
+
+    def refuse_then_vanish(h, after, flags):
+        ok = real(h, after, flags)
+        if not ok and after == ime:
+            wm.destroy(ime)  # ...that is gone before the next window up is looked for
+        return ok
+
+    wm.set_window_pos = refuse_then_vanish
+    wm.calls.clear()
+    assert layer._place_above(entry, prog) is False  # (the next pass looks again)
+    assert not [c for c in wm.calls if c[0] == "SetWindowPos" and c[1] == 0x9000 and c[2] == 0]
+    assert wm.z.index(app) < wm.z.index(0x9000)
+    layer.stop()
+
+
 def test_bring_to_front_also_steps_over_a_refused_anchor(env):
     wm, d = env
     wm.explorer_24h2()
@@ -151,6 +176,7 @@ def test_show_desktop_switching_on_again_and_again_is_reported_once_an_hour(env,
     assert not storms
     for i in range(4):  # four times within 30 s, as on the user's PC after resume
         cycle(60 if i == 0 else 2)
+        assert bool(storms) == (i == 3), f"after quick cycle {i + 1}"  # the fourth, not earlier
     assert len(storms) == 1
     warning = _lines(caplog, "Show desktop switched on")
     assert len(warning) == 1 and "4 times within" in warning[0] and "visible top-level windows" in warning[0]

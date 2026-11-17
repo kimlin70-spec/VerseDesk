@@ -1324,20 +1324,32 @@ def check_show_desktop_log(exe: Path, appdata: Path, report: Path) -> None:  # n
         time.sleep(2)
         press_win_d()
         time.sleep(3)
+        took = bool(api.IsIconic(w)) or 0 <= zindex(find_desktop_host()) < zindex(w)
+        if not expect("show desktop log: Win+D took effect on this machine", took,
+                      f"iconic={bool(api.IsIconic(w))}", warn_only=True):
+            return  # (the shell ignored the synthetic Win+D: nothing to check, not the app's fault)
         raised = [ln for ln in lines()[start:] if "desktop raised (Show desktop)" in ln]
-        last = raised[-1] if raised else ""
+        up = raised[-1] if raised else ""
         expect("show desktop log: Win+D is logged with the minimised windows, foreground, cursor and keys",
-               bool(re.search(r"app windows: [1-9]\d* minimised", last)) and "foreground 0x" in last
-               and "cursor (" in last and "held " in last and "foreground changes in the last" in last,
-               last[-500:] or "no line")
+               bool(re.search(r"app windows: \d+ minimised", up)) and "foreground 0x" in up
+               and "cursor (" in up and "held " in up and "foreground changes in the last" in up,
+               up[-500:] or "no line")
         press_win_d()
         time.sleep(3)
+        if not expect("show desktop log: Win+D toggled back on this machine", not api.IsIconic(w),
+                      "the test window is still minimised", warn_only=True):
+            return
         normal = [ln for ln in lines()[start:] if "desktop back to normal" in ln]
-        last = normal[-1] if normal else ""
-        expect("show desktop log: ...and the way back, with the window above the desktop again",
-               bool(re.search(r"[1-9]\d* above it", last)), last[-400:] or "no line")
+        down = normal[-1] if normal else ""
+        # the window Win+D minimised is counted as minimised, and above the desktop on the way back
+        # (the runner's own console windows were minimised before and stay so)
+        m_up = re.search(r"app windows: (\d+) minimised", up)
+        m_down = re.search(r"app windows: (\d+) minimised, \d+ covered by the desktop, (\d+) above it", down)
+        expect("show desktop log: ...the way back is logged too, and the window Win+D minimised is counted",
+               bool(m_up and m_down) and int(m_up[1]) > int(m_down[1]) and int(m_down[2]) >= 1,
+               f"raised: {up[-260:]} | normal: {down[-260:]}")
         expect("show desktop log: log lines carry milliseconds",
-               bool(re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} ", last)), last[:40])
+               bool(re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} ", down)), down[:40])
 
         # Show desktop on and off again and again within seconds (the user's PC after resume)
         before = len(lines())

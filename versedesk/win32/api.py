@@ -355,5 +355,14 @@ _KEYS = (("LButton", VK_LBUTTON), ("RButton", VK_RBUTTON), ("MButton", VK_MBUTTO
 
 
 def keys_down() -> str:
-    """The mouse buttons and the keys of Win+D / Win+M that Windows considers held right now."""
-    return " ".join(name for name, vk in _KEYS if GetAsyncKeyState(vk) & 0x8000) or "none"
+    """The mouse buttons and the keys of Win+D / Win+M held at this moment (the physical
+    state; "LButton" is the primary button, also with swapped buttons). "none" also when
+    Windows refuses the query, e.g. while an elevated window is in front."""
+    swapped = bool(GetSystemMetrics(SM_SWAPBUTTON))
+    names = []
+    for name, vk in _KEYS:
+        if GetAsyncKeyState(vk) & 0x8000:
+            if swapped and name in ("LButton", "RButton"):
+                name = "RButton" if name == "LButton" else "LButton"
+            names.append(name)
+    return " ".join(names) or "none"

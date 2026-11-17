@@ -315,6 +315,7 @@ class Win32DesktopLayer(QObject):
         self._failed_fix_logs = 0
         self._vetoes = 0
         self._last_tick_wall = 0.0
+        self._last_tick_mono = 0.0
         self._raises: collections.deque[float] = collections.deque(maxlen=STORM_RAISES)
         self._storm_at: float | None = None
         # recent foreground changes (time, class, keys held then): for the Show-desktop log line only
@@ -477,7 +478,8 @@ class Win32DesktopLayer(QObject):
 
     def _on_win_event(self, hook, event, hwnd, id_object, id_child, thread, ms):  # noqa: ARG002
         try:
-            # for the log: a click on the desktop shows as (held LButton), Win+D as (held LWin D)
+            # for the log: what is still held when this queued event is handled (usually LButton for a
+            # click, LWin [D] for Win+D; a quick press may already read "none")
             self._recent_fg.append((time.monotonic(), api.class_name(api.h(hwnd)), api.keys_down()))
             # Win+D makes the desktop the foreground window; Explorer may finish raising it a
             # little later, so look again a few times over the next second.
@@ -545,11 +547,12 @@ class Win32DesktopLayer(QObject):
 
     def _tick(self) -> None:
         try:
-            wall = time.time()
+            wall, mono = time.time(), time.monotonic()
             if self._last_tick_wall and wall - self._last_tick_wall > SLEEP_GAP_S:
-                log.info("no desktop check for %.0f s (the PC was asleep, or VerseDesk could not run)",
-                         wall - self._last_tick_wall)
-            self._last_tick_wall = wall
+                log.info("no desktop check for %.0f s (tick counter: %.0f s): the PC was asleep or VerseDesk "
+                         "could not run (a much smaller tick count: the clock was changed)",
+                         wall - self._last_tick_wall, mono - self._last_tick_mono)
+            self._last_tick_wall, self._last_tick_mono = wall, mono
             host = self._current_host()
             self._ensure_sentinel()
             raised = self._is_raised(host)
@@ -683,7 +686,8 @@ class Win32DesktopLayer(QObject):
                 return True  # already there
             ok = api.SetWindowPos(hwnd, anchor if anchor else api.HWND_TOP, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
             err = 0 if ok else api.last_error()
-            self._log_fix(entry, f"{what} (after {api.describe(anchor) if anchor else 'HWND_TOP'})", ok, err)
+            # (class and pid only: the title of one of our own windows would be asked for by a message)
+            self._log_fix(entry, f"{what} (after {_short(anchor) if anchor else 'HWND_TOP'})", ok, err)
             if ok or not anchor or api.is_topmost(anchor):
                 return bool(ok)
             anchor = api.h(api.GetWindow(anchor, api.GW_HWNDPREV))
@@ -704,7 +708,7 @@ class Win32DesktopLayer(QObject):
             if not api.is_topmost(hwnd):  # be sure we stayed in the topmost band
                 ok = api.SetWindowPos(hwnd, api.HWND_TOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
                 err = 0 if ok else api.last_error()
-        self._log_fix(entry, f"lifted above the raised desktop (below {api.describe(anchor)})", ok, err)
+        self._log_fix(entry, f"lifted above the raised desktop (below {_short(anchor)})", ok, err)
 
     def _note_raise(self) -> None:
         """Show desktop switched on again and again within seconds. Seen once on a user's PC
