@@ -43,3 +43,15 @@ def test_clear_crash_report_empties_the_file_but_keeps_reporting(tmp_path):
     finally:
         logging_setup.shutdown_logging(clean_exit=False)
     logging_setup.clear_crash_report()  # harmless when reporting is off
+
+
+def test_log_lines_carry_milliseconds(tmp_path):
+    """Show desktop switched on and off within one second on the user's PC: the order matters."""
+    import re
+
+    log_file = tmp_path / "log.txt"
+    logging_setup.setup_logging(log_file)
+    logging.getLogger("versedesk.test").info("first")
+    logging_setup.shutdown_logging(clean_exit=True)
+    line = next(ln for ln in log_file.read_text(encoding="utf-8").splitlines() if ln.endswith("first"))
+    assert re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} INFO    \[versedesk\.test\] first$", line), line

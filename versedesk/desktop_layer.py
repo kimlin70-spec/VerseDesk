@@ -10,7 +10,8 @@ The contract every widget relies on:
   * ``bring_to_front(widget)`` to put a widget above VerseDesk's other widgets (the group
     itself stays on the desktop layer);
   * ``detach(widget)`` before deleting a widget;
-  * ``start()`` / ``stop()`` around the application's lifetime.
+  * ``start()`` / ``stop()`` around the application's lifetime;
+  * the ``show_desktop_storm`` signal: Show desktop switched on again and again within seconds.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QWidget
 
 log = logging.getLogger("versedesk.desktop")
@@ -26,6 +27,8 @@ log = logging.getLogger("versedesk.desktop")
 
 class NullDesktopLayer(QObject):
     """Non-Windows stand-in: remembers state so tests can check it."""
+
+    show_desktop_storm = Signal()  # (never emitted here; the Windows layer has the real one)
 
     def __init__(self, mode: str = "bottom", parent: QObject | None = None):
         super().__init__(parent)

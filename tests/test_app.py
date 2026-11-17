@@ -2,6 +2,7 @@
 
 import datetime as dt
 import json
+import logging
 import os
 
 import pytest
@@ -683,5 +684,38 @@ def test_explorer_slot_follows_settings_json_edited_outside(qapp, home, embedded
         app.set_edit_mode(True)
         g = app.explorer._frame.geometry()
         assert (g.x(), g.y(), g.width(), g.height()) == (50, 60, 600, 400)
+    finally:
+        shutdown(app)
+
+
+def test_show_desktop_switching_on_by_itself_brings_a_hint_without_a_restart(qapp, home, embedded, monkeypatch, caplog):
+    """On the user's PC every click on the desktop minimised all windows until the reboot
+    (Windows' Show desktop state after resume). When the layer sees that, the user is told
+    what helps without restarting the PC."""
+    from versedesk.ui.tray import TrayController
+
+    notices = []
+    monkeypatch.setattr(TrayController, "notify",
+                        lambda self, title, msg, warning=False, msecs=8000: notices.append((title, msg)))
+    caplog.set_level(logging.INFO, logger="versedesk.app")
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        notices.clear()  # (the first-run greeting)
+        app.layer.show_desktop_storm.emit()
+        assert len(notices) == 1
+        title, msg = notices[0]
+        assert "Win+D" in msg and "Windows 탐색기" in msg and "다시 시작" in msg
+        assert any("told the user" in r.getMessage() for r in caplog.records)
+    finally:
+        shutdown(app)
+
+
+def test_a_screen_change_writes_the_new_screens_to_the_log(qapp, home, embedded, caplog):
+    caplog.set_level(logging.INFO, logger="versedesk.app")
+    app, _ = make_app(qapp, home, embedded, at(8))
+    try:
+        app._on_screens_settled()
+        line = next(r.getMessage() for r in caplog.records if "screen configuration changed" in r.getMessage())
+        assert "screens (" in line and "geometry=" in line and "(primary)" in line
     finally:
         shutdown(app)

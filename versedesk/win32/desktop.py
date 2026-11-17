@@ -40,13 +40,14 @@ widget is activated and couple input queues with Explorer, so it is not the defa
 
 from __future__ import annotations
 
+import collections
 import ctypes
 import logging
 import platform
 import time
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QWindow
 from PySide6.QtWidgets import QWidget
 
@@ -65,6 +66,13 @@ FIGHT_WINDOW_S = 10.0
 FIGHT_LIMIT = 12
 FIGHT_PAUSE_S = 30.0
 MAX_INFO_FIX_LOGS = 40
+MAX_FAILED_FIX_LOGS = 20  # a refused SetWindowPos is always worth a line (with its error code)
+MAX_ANCHOR_TRIES = 4  # windows tried as the insert-after anchor (Windows refuses some hidden ones)
+RECENT_S = 5.0  # the Show-desktop log line lists the foreground changes of these last seconds
+SLEEP_GAP_S = 20.0  # no keeper pass for this long: the PC was asleep (or VerseDesk could not run)
+STORM_RAISES = 4  # Show desktop switched on this many times...
+STORM_WINDOW_S = 30.0  # ...within this many seconds is not the user pressing Win+D
+STORM_REPEAT_S = 3600.0  # (log the window list and tell the user at most once an hour)
 OUR_ZORDER_FLAGS = (
     api.SWP_NOMOVE | api.SWP_NOSIZE | api.SWP_NOACTIVATE | api.SWP_NOOWNERZORDER | api.SWP_NOSENDCHANGING
 )
@@ -239,6 +247,34 @@ def describe_desktop(own: set[int] | frozenset[int] = frozenset()) -> str:
         return f"describe_desktop failed: {e}"
 
 
+def _short(hwnd: int) -> str:
+    return f"0x{hwnd:X} {api.class_name(hwnd)!r} pid={api.process_id(hwnd)}" if hwnd else "NULL"
+
+
+def app_window_census(host: int, own: set[int] | frozenset[int] = frozenset()) -> str:
+    """For the log: the windows the taskbar shows (visible, not cloaked, not tool or topmost
+    windows, unowned or WS_EX_APPWINDOW), counted as minimised, covered by the desktop (below
+    the host but not minimised) or above it. A real Show desktop minimises them; a desktop
+    that merely came to the front covers them."""
+    counts = {"minimised": 0, "covered": 0, "above": 0}
+    below_host = False
+    w = api.h(api.GetTopWindow(None))
+    for _ in range(MAX_WALK):
+        if not w:
+            break
+        if w == host:
+            below_host = True
+        elif w not in own and api.IsWindowVisible(w) and not api.is_cloaked(w):
+            ex = api.ex_style(w)
+            unowned = not api.h(api.GetWindow(w, api.GW_OWNER)) or ex & api.WS_EX_APPWINDOW
+            if (unowned and not ex & (api.WS_EX_TOOLWINDOW | api.WS_EX_TOPMOST)
+                    and api.class_name(w) not in DESKTOP_CLASSES):
+                counts["minimised" if api.IsIconic(w) else "covered" if below_host else "above"] += 1
+        w = api.h(api.GetWindow(w, api.GW_HWNDNEXT))
+    return (f"app windows: {counts['minimised']} minimised, {counts['covered']} covered by the desktop, "
+            f"{counts['above']} above it")
+
+
 def _flags(ex: int) -> str:
     names = [
         ("TOOLWINDOW", api.WS_EX_TOOLWINDOW),
@@ -265,6 +301,9 @@ class _Pinned:
 
 
 class Win32DesktopLayer(QObject):
+    # Show desktop switched on again and again within seconds (the app tells the user what helps)
+    show_desktop_storm = Signal()
+
     def __init__(self, mode: str = "bottom", parent: QObject | None = None):
         super().__init__(parent)
         self.mode = mode if mode in ("bottom", "owner") else "bottom"
@@ -273,7 +312,13 @@ class Win32DesktopLayer(QObject):
         self._raised = False
         self._sentinel = 0
         self._info_fix_logs = 0
+        self._failed_fix_logs = 0
         self._vetoes = 0
+        self._last_tick_wall = 0.0
+        self._raises: collections.deque[float] = collections.deque(maxlen=STORM_RAISES)
+        self._storm_at: float | None = None
+        # recent foreground changes (time, class, keys held then): for the Show-desktop log line only
+        self._recent_fg: collections.deque[tuple[float, str, str]] = collections.deque(maxlen=8)
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
@@ -352,8 +397,7 @@ class Win32DesktopLayer(QObject):
             return  # already directly above the others
         if api.is_topmost(highest) != api.is_topmost(entry.hwnd):
             return  # mid-transition (Show desktop); the next tick sorts the bands out
-        ok = api.SetWindowPos(entry.hwnd, above if above else api.HWND_TOP, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
-        self._log_fix(entry, f"brought above the other widgets (after {api.describe(above) if above else 'HWND_TOP'})", ok)
+        self._insert_after(entry, above, "brought above the other widgets")
 
     def start(self) -> None:
         log.info("desktop layer mode=%s\n%s", self.mode, describe_desktop(self._own()))
@@ -433,6 +477,8 @@ class Win32DesktopLayer(QObject):
 
     def _on_win_event(self, hook, event, hwnd, id_object, id_child, thread, ms):  # noqa: ARG002
         try:
+            # for the log: a click on the desktop shows as (held LButton), Win+D as (held LWin D)
+            self._recent_fg.append((time.monotonic(), api.class_name(api.h(hwnd)), api.keys_down()))
             # Win+D makes the desktop the foreground window; Explorer may finish raising it a
             # little later, so look again a few times over the next second.
             for delay in BURST_MS:
@@ -499,13 +545,21 @@ class Win32DesktopLayer(QObject):
 
     def _tick(self) -> None:
         try:
+            wall = time.time()
+            if self._last_tick_wall and wall - self._last_tick_wall > SLEEP_GAP_S:
+                log.info("no desktop check for %.0f s (the PC was asleep, or VerseDesk could not run)",
+                         wall - self._last_tick_wall)
+            self._last_tick_wall = wall
             host = self._current_host()
             self._ensure_sentinel()
             raised = self._is_raised(host)
             if raised != self._raised:
                 self._raised = raised
-                log.info("desktop %s", "raised (Show desktop): lifting widgets" if raised else "back to normal")
+                log.info("desktop %s%s", "raised (Show desktop): lifting widgets" if raised else "back to normal",
+                         self._transition_details(host, raised))
                 self._timer.setInterval(RAISED_TICK_MS if raised else TICK_MS)
+                if raised:
+                    self._note_raise()
             # Each widget is placed relative to the desktop/taskbar one by one. Going through
             # them in their current order (top-first when they sink back on the desktop,
             # bottom-first when they are lifted) keeps their order among themselves, so a
@@ -610,28 +664,96 @@ class Win32DesktopLayer(QObject):
             return False
         return True
 
-    def _place_above(self, entry: _Pinned, host: int) -> None:
+    def _place_above(self, entry: _Pinned, host: int) -> bool:
         """Normal state: put the widget directly above the desktop host in the z-order."""
+        return self._insert_after(entry, api.h(api.GetWindow(host, api.GW_HWNDPREV)), "just above the desktop")
+
+    def _insert_after(self, entry: _Pinned, anchor: int, what: str) -> bool:
+        """Put the widget directly below ``anchor`` (SetWindowPos insert-after; 0 = HWND_TOP).
+
+        Windows sometimes refuses the anchor (seen on a user's PC: hidden 'Default IME' and
+        'CicLoaderWndClass' windows of other processes). A widget that has just left the
+        topmost band would then stay above every app window, so the next window up is tried
+        instead: the windows skipped are hidden ones, the widget still sits on the desktop.
+        Never past a topmost anchor (below a higher topmost window the widget would become
+        topmost) and never on to HWND_TOP."""
         hwnd = entry.hwnd
-        above = api.h(api.GetWindow(host, api.GW_HWNDPREV))
-        if above == hwnd:
-            return
-        insert_after = above if above else api.HWND_TOP
-        ok = api.SetWindowPos(hwnd, insert_after, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
-        self._log_fix(entry, f"just above the desktop (after {api.describe(above) if above else 'HWND_TOP'})", ok)
+        for _ in range(MAX_ANCHOR_TRIES):
+            if anchor == hwnd:
+                return True  # already there
+            ok = api.SetWindowPos(hwnd, anchor if anchor else api.HWND_TOP, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+            err = 0 if ok else api.last_error()
+            self._log_fix(entry, f"{what} (after {api.describe(anchor) if anchor else 'HWND_TOP'})", ok, err)
+            if ok or not anchor or api.is_topmost(anchor):
+                return bool(ok)
+            anchor = api.h(api.GetWindow(anchor, api.GW_HWNDPREV))
+            if not anchor:
+                return False  # the refused window is gone: the next pass looks again
+        return False
 
     def _lift(self, entry: _Pinned, host: int) -> None:
         """Show desktop: topmost, just below the lowest foreign topmost window."""
         hwnd = entry.hwnd
         ok = api.SetWindowPos(hwnd, api.HWND_TOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+        err = 0 if ok else api.last_error()
         anchor = lowest_foreign_topmost_above(host, self._own())
         if anchor:
-            ok = api.SetWindowPos(hwnd, anchor, 0, 0, 0, 0, OUR_ZORDER_FLAGS) and ok
+            below = api.SetWindowPos(hwnd, anchor, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
+            err = err if below else api.last_error()
+            ok = below and ok
             if not api.is_topmost(hwnd):  # be sure we stayed in the topmost band
                 ok = api.SetWindowPos(hwnd, api.HWND_TOPMOST, 0, 0, 0, 0, OUR_ZORDER_FLAGS)
-        self._log_fix(entry, f"lifted above the raised desktop (below {api.describe(anchor)})", ok)
+                err = 0 if ok else api.last_error()
+        self._log_fix(entry, f"lifted above the raised desktop (below {api.describe(anchor)})", ok, err)
 
-    def _log_fix(self, entry: _Pinned, what: str, ok) -> None:
+    def _note_raise(self) -> None:
+        """Show desktop switched on again and again within seconds. Seen once on a user's PC
+        after resume from sleep: every click on the desktop minimised all windows until the
+        reboot (a Windows/Explorer state; VerseDesk only saw it). Write the whole window list
+        to the log once and let the app tell the user what helps."""
+        now = time.monotonic()
+        self._raises.append(now)
+        if len(self._raises) < STORM_RAISES or now - self._raises[0] > STORM_WINDOW_S:
+            return
+        if self._storm_at is not None and now - self._storm_at < STORM_REPEAT_S:
+            return
+        self._storm_at = now
+        log.warning("Show desktop switched on %d times within %.0f s; the windows now:\n%s",
+                    STORM_RAISES, now - self._raises[0], describe_desktop(self._own()))
+        self.show_desktop_storm.emit()
+
+    def _transition_details(self, host: int, raised: bool) -> str:
+        """For the log: what the user and Windows were doing when Show desktop switched on
+        or off (a few times a day). Read-only calls; nothing is sent to another program."""
+        try:
+            own = self._own()
+            parts = []
+            if not raised:
+                still_up = host and self._sentinel and api.h(api.FindWindowExW(None, host, "Static", SENTINEL_TITLE))
+                parts.append(f"covered by {_short(blocking_window_above(host, own))}" if still_up
+                             else "lowered by Explorer")
+            parts.append(f"foreground {_short(api.h(api.GetForegroundWindow()))}")
+            pos = api.cursor_pos()
+            if pos:
+                under = api.window_at(pos)
+                root = api.h(api.GetAncestor(under, api.GA_ROOT)) if under else 0
+                parts.append(f"cursor {pos} over {api.class_name(under)!r} in {_short(root)}")
+            parts.append(f"held {api.keys_down()}, last input {api.ms_since_last_input()} ms ago")
+            parts.append(app_window_census(host, own))
+            now = time.monotonic()
+            recent = [f"{t - now:+.1f}s {cls!r} (held {keys})" for t, cls, keys in self._recent_fg
+                      if now - t <= RECENT_S]
+            parts.append(f"foreground changes in the last {RECENT_S:.0f} s: {', '.join(recent) or 'none'}")
+            return " | " + "; ".join(parts)
+        except Exception as e:  # diagnostics must never break the keeper
+            return f" (details failed: {e})"
+
+    def _log_fix(self, entry: _Pinned, what: str, ok, err: int = 0) -> None:
+        if not ok and self._failed_fix_logs < MAX_FAILED_FIX_LOGS:
+            self._failed_fix_logs += 1
+            log.warning("widget %r %s FAILED (error %s) topmost=%s", entry.widget.objectName(), what, err,
+                        api.is_topmost(entry.hwnd))
+            return
         level = logging.INFO if self._info_fix_logs < MAX_INFO_FIX_LOGS else logging.DEBUG
         self._info_fix_logs += 1
         log.log(level, "widget %r %s ok=%s topmost=%s", entry.widget.objectName(), what, bool(ok),

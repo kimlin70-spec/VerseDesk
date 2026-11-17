@@ -61,6 +61,12 @@ HSHELL_WINDOWACTIVATED = 4  # ...or activated (0x8004 with the "rude app" high b
 DWM_CLOAKED_SHELL = 0x2  # cloaked by the shell: the window is on another virtual desktop
 VK_LBUTTON = 0x01
 VK_RBUTTON = 0x02
+VK_MBUTTON = 0x04
+VK_SHIFT = 0x10
+VK_CONTROL = 0x11
+VK_MENU = 0x12  # Alt
+VK_LWIN = 0x5B
+VK_RWIN = 0x5C
 SM_SWAPBUTTON = 23
 
 HWND_TOP = 0
@@ -93,6 +99,10 @@ WINEVENTPROC = ctypes.WINFUNCTYPE(
     wintypes.DWORD,
 )
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, HWND, wintypes.LPARAM)
+
+
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
 
 
 class WINDOWPOS(ctypes.Structure):
@@ -182,6 +192,10 @@ DeregisterShellHookWindow = _proto(user32.DeregisterShellHookWindow, wintypes.BO
 GetAsyncKeyState = _proto(user32.GetAsyncKeyState, ctypes.c_short, ctypes.c_int)
 GetSystemMetrics = _proto(user32.GetSystemMetrics, ctypes.c_int, ctypes.c_int)
 GetModuleHandleW = _proto(kernel32.GetModuleHandleW, wintypes.HMODULE, wintypes.LPCWSTR)
+GetCursorPos = _proto(user32.GetCursorPos, wintypes.BOOL, ctypes.POINTER(wintypes.POINT))
+WindowFromPoint = _proto(user32.WindowFromPoint, HWND, wintypes.POINT)
+GetLastInputInfo = _proto(user32.GetLastInputInfo, wintypes.BOOL, ctypes.POINTER(LASTINPUTINFO))
+GetTickCount = _proto(kernel32.GetTickCount, wintypes.DWORD)
 if dwmapi is not None:
     DwmSetWindowAttribute = _proto(
         dwmapi.DwmSetWindowAttribute,
@@ -314,3 +328,32 @@ def describe(hwnd: int) -> str:
         )
     except Exception as e:  # pragma: no cover - diagnostics must never fail
         return f"0x{hwnd:X} (describe failed: {e})"
+
+
+# --- for the log only, on rare events (Show desktop switched on or off) ----------------------
+
+
+def cursor_pos() -> tuple[int, int] | None:
+    pt = wintypes.POINT()
+    return (pt.x, pt.y) if GetCursorPos(ctypes.byref(pt)) else None
+
+
+def window_at(pos: tuple[int, int]) -> int:
+    return h(WindowFromPoint(wintypes.POINT(*pos)))
+
+
+def ms_since_last_input() -> int | None:
+    """Milliseconds since the last keyboard or mouse input of the session."""
+    info = LASTINPUTINFO(ctypes.sizeof(LASTINPUTINFO), 0)
+    if not GetLastInputInfo(ctypes.byref(info)):
+        return None
+    return (GetTickCount() - info.dwTime) & 0xFFFFFFFF
+
+
+_KEYS = (("LButton", VK_LBUTTON), ("RButton", VK_RBUTTON), ("MButton", VK_MBUTTON), ("LWin", VK_LWIN),
+         ("RWin", VK_RWIN), ("Ctrl", VK_CONTROL), ("Alt", VK_MENU), ("Shift", VK_SHIFT), ("D", 0x44), ("M", 0x4D))
+
+
+def keys_down() -> str:
+    """The mouse buttons and the keys of Win+D / Win+M that Windows considers held right now."""
+    return " ".join(name for name, vk in _KEYS if GetAsyncKeyState(vk) & 0x8000) or "none"

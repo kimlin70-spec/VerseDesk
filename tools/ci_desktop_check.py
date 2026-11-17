@@ -47,6 +47,7 @@ import argparse
 import ctypes
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1290,6 +1291,77 @@ def check_explorer_slot(exe: Path, appdata: Path, report: Path) -> None:
         set_slot(appdata, enabled=False)
 
 
+SHOW_DESKTOP_WINDOW = "VerseDesk CI show-desktop window"
+
+
+def check_show_desktop_log(exe: Path, appdata: Path, report: Path) -> None:  # noqa: ARG001
+    """What log.txt says when Show desktop switches on and off. On a user's PC every click on
+    the desktop once minimised all windows until the reboot; these lines are what will tell
+    the cause next time, so they must work on a real desktop."""
+    log_path = appdata / "log.txt"
+
+    def lines() -> list[str]:
+        try:
+            return log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return []
+
+    start = len(lines())
+    proc = start_app(exe, appdata)
+    win = None
+    try:
+        if not expect("show desktop log: the app starts", bool(find_window(VERSE_TITLE, 60))):
+            return
+        time.sleep(3)
+        minimize_consoles()
+        win = subprocess.Popen([sys.executable, "-c", (
+            "import tkinter as tk; r = tk.Tk(); r.title(%r); r.geometry('420x260+300+200'); "
+            "r.after(150000, r.destroy); r.mainloop()") % SHOW_DESKTOP_WINDOW])
+        w = find_window(SHOW_DESKTOP_WINDOW, 30)
+        if not expect("show desktop log: an app window is open", bool(w)):
+            return
+        user32.SetForegroundWindow(w)
+        time.sleep(2)
+        press_win_d()
+        time.sleep(3)
+        raised = [ln for ln in lines()[start:] if "desktop raised (Show desktop)" in ln]
+        last = raised[-1] if raised else ""
+        expect("show desktop log: Win+D is logged with the minimised windows, foreground, cursor and keys",
+               bool(re.search(r"app windows: [1-9]\d* minimised", last)) and "foreground 0x" in last
+               and "cursor (" in last and "held " in last and "foreground changes in the last" in last,
+               last[-500:] or "no line")
+        press_win_d()
+        time.sleep(3)
+        normal = [ln for ln in lines()[start:] if "desktop back to normal" in ln]
+        last = normal[-1] if normal else ""
+        expect("show desktop log: ...and the way back, with the window above the desktop again",
+               bool(re.search(r"[1-9]\d* above it", last)), last[-400:] or "no line")
+        expect("show desktop log: log lines carry milliseconds",
+               bool(re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} ", last)), last[:40])
+
+        # Show desktop on and off again and again within seconds (the user's PC after resume)
+        before = len(lines())
+        for _ in range(5):
+            press_win_d()
+            time.sleep(1.2)
+            press_win_d()
+            time.sleep(1.2)
+        time.sleep(2)
+        new = lines()[before:]
+        cycles = sum("desktop raised (Show desktop)" in ln for ln in new)
+        expect("show desktop log: switching on again and again is noticed, with the window list",
+               any("Show desktop switched on 4 times" in ln for ln in new), f"{cycles} raise(s) logged")
+        expect("show desktop log: ...and the user is told what helps",
+               any("told the user how to stop Show desktop" in ln for ln in new))
+        expect("show desktop log: ...only once",
+               sum("Show desktop switched on 4 times" in ln for ln in new) == 1, f"{cycles} raise(s) logged")
+        screenshot(report, "10-show-desktop-hint")
+    finally:
+        if win is not None:
+            win.kill()
+        end_app(proc, appdata, "show desktop log: the app quits cleanly")
+
+
 def kill_tree(pid: int) -> None:
     subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
 
@@ -1616,6 +1688,10 @@ def run(exe: Path, report: Path) -> None:
 
     # 탐색기 창 자리 고정 (Explorer window slot).
     check_explorer_slot(exe, appdata, report)
+
+    # What log.txt says about Show desktop (the user's "every click on the desktop minimises
+    # all windows" report): the lines that will tell the cause next time.
+    check_show_desktop_log(exe, appdata, report)
 
     log = appdata / "log.txt"
     if log.exists():

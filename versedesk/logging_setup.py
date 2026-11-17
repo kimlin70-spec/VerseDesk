@@ -15,7 +15,7 @@ import sys
 import threading
 from pathlib import Path
 
-LOG_FORMAT = "%(asctime)s %(levelname)-7s [%(name)s] %(message)s"
+LOG_FORMAT = "%(asctime)s.%(msecs)03d %(levelname)-7s [%(name)s] %(message)s"  # (ms: the order of quick events)
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAX_BYTES = 512 * 1024
 

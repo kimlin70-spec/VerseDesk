@@ -63,6 +63,8 @@ class FakeWM:
         self.next_hwnd = 0x1000
         self.shell = 0
         self.foreground = 0
+        self.refused_anchors: set[int] = set()  # insert-after windows Windows refuses (seen: foreign IME/CTF windows)
+        self.keys = "none"  # what api.keys_down() reports
         self.calls: list[tuple] = []
         self.api = self._make_api()
 
@@ -217,7 +219,7 @@ class FakeWM:
                 i -= 1
             self.z.insert(i, h)
         else:
-            if after not in self.z:
+            if after not in self.z or after in self.refused_anchors:
                 return False
             self.z.remove(h)
             idx = self.z.index(after) + 1
@@ -332,4 +334,9 @@ class FakeWM:
 
         m.CreateWindowExW = create_window
         m.DestroyWindow = lambda x: wm.destroy(h(x)) or True
+        m.last_error = lambda: 5  # ERROR_ACCESS_DENIED
+        m.cursor_pos = lambda: (10, 10)
+        m.window_at = lambda pos: wm.shell
+        m.keys_down = lambda: wm.keys
+        m.ms_since_last_input = lambda: 0
         return m

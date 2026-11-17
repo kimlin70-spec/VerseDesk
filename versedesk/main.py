@@ -31,10 +31,31 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return args
 
 
+def _windows_build() -> str:
+    """e.g. 'Windows 25H2, build 26200.7171' (platform.version() has no update number, which is
+    what Microsoft's fixes are listed by)."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+            def value(name):
+                try:
+                    return winreg.QueryValueEx(key, name)[0]
+                except OSError:
+                    return "?"
+
+            return f"Windows {value('DisplayVersion')}, build {value('CurrentBuild')}.{value('UBR')}"
+    except OSError:
+        return ""
+
+
 def _log_startup() -> None:
     log.info("=" * 70)
     log.info("VerseDesk %s starting", version_string())
-    log.info("python %s on %s (%s)", platform.python_version(), platform.platform(), platform.machine())
+    log.info("python %s on %s (%s) %s", platform.python_version(), platform.platform(), platform.machine(),
+             _windows_build())
     log.info("executable %s frozen=%s", sys.executable, bool(getattr(sys, "frozen", False)))
     log.info("data folder %s", paths.app_data_dir())
 

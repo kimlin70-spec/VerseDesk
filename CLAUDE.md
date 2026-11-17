@@ -69,6 +69,7 @@
   재부팅 자동 실행은 나중에 확인 예정. **"말씀 위 바탕화면 아이콘 클릭 안 됨"** 보고 → CI(평소 상태+Win+D, 실제 마우스 클릭,
   그려진 글자 픽셀, 대조 실험)에서는 재현 안 됨. 앱이 말씀 창에 클릭이 닿으면 log.txt에 "reached the verse window although
   clicks should pass through" + 창 스타일·바탕화면 구조를 남기게 함 → 사용자 PC log.txt로 원인 확인 필요(재현 방법도 물어볼 것).
+  2026-11-17에 받은 log.txt(11-12~11-17): 그 기록이 생긴 build 27(11-12 14:56) 이후 한 번도 없음 → 다시 보고되면 그때 확인.
 - [완료, 사용자 확인 대기] ② 폴더 구역 (같은 브랜치) — CI 79개 점검(두 윈도우) 통과, 4관점 검토 16건+보완 4건 반영
   - 파일: `zones.py`(모델·경로 규칙·설정), `zone_manager.py`(설정↔창, 사용자 동작 저장), `zone_io.py`(작업 스레드:
     존재 확인·아이콘·열기), `shell.py`+`win32/shell.py`(SHGetFileInfo 아이콘→QImage, ShellExecuteEx 열기, 깨끗한 실행 환경),
@@ -181,6 +182,31 @@
     "이미 열려 있던 창" 점검은 앱 로그의 "1 Explorer window(s) already open"도 확인(창을 다시 건드리지 않으면 장부가 없어도 통과하므로).
     `tests/test_explorer_placer.py`만 따로 돌리면 죽던 문제: 테스트가 hide()를 바꿔 둔 틀이 화면에 남아 다음 테스트의 그리기 도중 파괴됨
     → 그 테스트 끝에서 틀을 숨김(앱 문제가 아님).
+
+- [완료, 사용자 확인 대기] ⑤ "바탕화면 클릭하면 모든 창이 최소화" 보고 조사 + 진단 기록 (같은 브랜치, 2026-11-17)
+  - 사용자 log.txt: 11-17 13:40:23 절전 복귀(30분 차례 변경이 늦게 기록됨) → 13:40:25·26 화면 구성 변경 → 13:40:58~13:41:44
+    46초에 Show desktop 켜짐/꺼짐 10번(평소엔 하루 몇 번, 1~10초, 대개 Win+D 뒤 구역에서 열기) → 재부팅으로 해소.
+    그 세션에 경고·오류 없음, 그 사이 구역·탐색기 자리 동작 없음. 같은 날 07:43 탐색기 두 번 재시작(그 뒤 Win+D 정상).
+  - 4관점 조사(윈도우 쪽 원인 / VerseDesk 동작 / 로그 감식 / 반대 심문): VerseDesk는 최소화·바탕 화면 보기 API를 부르지 않고
+    입력을 보내지 않으며 Progman을 움직이지 않음 → 관찰만 했다고 판단(확정 아님). 가장 그럴듯한 원인: 윈도우 11 25H2 탐색기의
+    '바탕 화면 보기' 상태가 절전·모니터 재연결 뒤 꼬임(공개 보고: 바탕화면 클릭마다 Win+D처럼 최소화, Win+D 한 번이나 탐색기
+    다시 시작으로 해결). 덜 그럴듯: 터치패드 세 손가락 제스처, 눌린 채 남은 Win 키, 위 모니터 작업 표시줄의 '바탕 화면 보기' 모서리.
+    "desktop raised" 줄 = Progman이 센티널 위로 올라오고 그 위에 보통 앱 창이 없음(= Show desktop의 모양).
+  - 추가한 기록(사용자에게 안 보임, `win32/desktop.py`): 켜짐/꺼짐 줄 끝에 ` | ` 뒤로 이유(lowered by Explorer / covered by 창),
+    전경 창, 커서 위치와 그 아래 창, 지금 눌린 키·버튼(`api.keys_down`), 마지막 입력 후 ms, 앱 창 집계(`app_window_census`:
+    minimised / covered by the desktop / above it — 진짜 Show desktop은 minimised), 최근 5초 전경 변경과 그때 눌린 키
+    (WinEvent 훅에서 기록; 바탕화면 클릭은 held LButton, Win+D는 held LWin D). 30초 안에 4번 켜지면 WARNING + 전체 창 목록
+    + `show_desktop_storm` 신호 → 트레이 알림 "창이 자꾸 모두 내려가나요?"(Win+D, 탐색기 다시 시작 안내; 1시간에 한 번).
+    키퍼 패스 간격 20초 초과 → "no desktop check for N s"(절전). 화면 구성 변경 때 화면 목록. 로그 시간 ms(`logging_setup`).
+    시작 때 "Windows 25H2, build 26200.UBR"(`main._windows_build`, 레지스트리). SetWindowPos 실패는 오류 코드와 WARNING(실행당 20줄;
+    INFO 40줄 한도에 묻히지 않게).
+  - 함께 고친 실제 버그: insert-after 기준 창을 윈도우가 거부하면(사용자 PC: 다른 프로세스의 숨은 'Default IME'·
+    'CicLoaderWndClass', ok=False) Show desktop이 끝난 직후 위젯이 HWND_NOTOPMOST 자리(모든 앱 창 위)에 남음(11-13 14:16 싸움 경고)
+    → `_insert_after`: 다음 창 위로 최대 4번(건너뛰는 건 숨은 창), topmost 기준 창은 넘지 않음(그 위 topmost 아래에 넣으면 위젯이
+    topmost가 됨), 기준 창이 사라지면 HWND_TOP으로 빠지지 않고 다음 패스에. `bring_to_front`도 같은 경로.
+  - 사용자 안내: README 7-1(Win+D 한 번→한 번 더, 안 되면 작업 관리자에서 Windows 탐색기 다시 시작, VerseDesk 종료로 원인 가리기).
+    동작(고정 방식)은 바꾸지 않음: Rainmeter와 같은 방식이고 로그상 원인이 아님. 다시 생기면 새 log.txt 줄로 판단.
+  - CI `check_show_desktop_log`: 실제 Win+D 줄에 최소화 집계·전경·커서·키, ms 시간, 빠른 Win+D 10번 → 경고 1번 + 알림 기록.
 
 ## 개발 메모 (다음 세션용)
 

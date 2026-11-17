@@ -129,6 +129,7 @@ class VerseDeskApp(QObject):
 
         # widgets
         self.layer = create_desktop_layer(store.settings.desktop_mode, parent=self)
+        self.layer.show_desktop_storm.connect(self._on_show_desktop_storm)
         self.verse_widget = VerseWidget(
             VerseAppearance.from_settings(store.settings.verse), extra_flags=self.layer.extra_window_flags
         )
@@ -246,8 +247,8 @@ class VerseDeskApp(QObject):
         self.verse_widget.hide()
         self.qapp.quit()
 
-    @safe
-    def _log_diagnostics(self) -> None:
+    @staticmethod
+    def _screen_lines() -> list[str]:
         screens = QGuiApplication.screens()
         lines = [f"screens ({len(screens)}):"]
         for s in screens:
@@ -256,6 +257,11 @@ class VerseDeskApp(QObject):
                 f"dpr={s.devicePixelRatio()} logicalDpi={s.logicalDotsPerInch():.0f}"
                 f"{' (primary)' if s is QGuiApplication.primaryScreen() else ''}"
             )
+        return lines
+
+    @safe
+    def _log_diagnostics(self) -> None:
+        lines = self._screen_lines()
         g = self.verse_widget.geometry()
         lines.append(f"verse widget at {g.getRect()} on screen {self.verse_widget.screen().name()!r}")
         lines.append(self.zones.diagnostics())
@@ -562,7 +568,7 @@ class VerseDeskApp(QObject):
     def _on_screens_settled(self) -> None:
         if self._quitting:
             return
-        log.info("screen configuration changed; re-checking widget positions")
+        log.info("screen configuration changed; re-checking widget positions\n%s", "\n".join(self._screen_lines()))
         self.verse_widget.relayout()
         self._position_verse()
         if not self.verse_widget.isVisible():
@@ -572,6 +578,19 @@ class VerseDeskApp(QObject):
         self.zones.reposition()
         self.explorer.reposition()
         self.layer.request_sync()
+
+    @safe
+    def _on_show_desktop_storm(self) -> None:
+        """Windows' Show desktop keeps switching itself on (once seen after resume from sleep:
+        every click on the desktop minimised all windows until the PC was restarted). Say what
+        helps without a restart; the layer asks at most once an hour."""
+        log.info("told the user how to stop Show desktop from switching on by itself")
+        self.tray.notify(
+            "창이 자꾸 모두 내려가나요?",
+            "바탕화면을 누를 때마다 창이 모두 내려가면 Win+D를 한 번 눌러 보세요(창이 다 내려가면 한 번 더). "
+            "그래도 그러면 작업 관리자 → 'Windows 탐색기' → 다시 시작.",
+            msecs=20000,
+        )
 
     # ------------------------------------------------------------------ edit mode, autostart, folder
 
