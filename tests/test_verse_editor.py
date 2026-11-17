@@ -169,6 +169,44 @@ def test_set_list_keeps_the_selection(editor):
     assert [i.text(0) for i in editor.tree.selectedItems()] == ["Book 2:1 (BSB)"]
 
 
+def test_a_reload_selects_only_the_entry_that_was_picked(editor):
+    """Typed words often share a source (the same key()), and the same words can be in the list
+    twice: after verses.json changed outside, 삭제 must still remove only what the user picked."""
+    mine = [Verse("어머니 말씀", t, "user") for t in ("오늘도 감사합니다", "천천히 가도 괜찮다", "일찍 자거라")]
+    twice = Verse("", "Same words.", "user")
+    editor.set_list(_list(1) + mine + [twice, twice])
+    editor._select_rows([2])
+    editor.set_list([Verse("", "added in Notepad", "user")] + _list(1) + mine + [twice, twice])
+    assert [v.text for v in editor._selected_verses()] == ["천천히 가도 괜찮다"]
+    editor.delete_selected()
+    assert [v.text for v in editor.saved[-1]] == ["added in Notepad", "Text 1.", "오늘도 감사합니다", "일찍 자거라",
+                                                 "Same words.", "Same words."]
+    editor._select_rows([5])
+    editor.set_list(editor.verses())
+    assert editor._selected_rows() == [4]  # one of the two copies, not both
+    editor.set_list(_list(2))  # the picked entry itself is gone: nothing else gets picked instead
+    assert editor._selected_rows() == []
+
+
+def test_the_size_limit_counts_rows_not_keys(editor, monkeypatch):
+    from versedesk.ui import verse_editor
+
+    monkeypatch.setattr(verse_editor, "MAX_VERSES", 4)
+    editor.set_list(_list(2) + [Verse("어머니 말씀", "하나", "user"), Verse("어머니 말씀", "둘", "user")])
+    editor.input.setText("요 3:16")
+    editor.add_from_input()
+    assert len(editor.verses()) == 4 and editor.saved == []
+    assert "4개까지" in editor.message.text()
+
+
+def test_typed_words_are_shown_as_typed_not_as_html(editor):
+    editor.ask_own = _answer(("<b>굵게</b> &lt;", "<i>나</i>"))
+    editor.own_button.click()
+    assert editor.preview.textFormat() == Qt.TextFormat.PlainText
+    assert editor.message.textFormat() == Qt.TextFormat.PlainText
+    assert editor.preview.text() == "<b>굵게</b> &lt;\n— <i>나</i>"
+
+
 def test_clicking_the_buttons_leaves_the_keyboard_in_the_list(editor, qapp):
     """A focused button that gets disabled would pass the focus to the interval dropdown,
     where ↑/↓ would silently change (and save) the interval."""

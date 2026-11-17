@@ -15,6 +15,7 @@ ui/dialogs.py).  The Bible text is loaded on the first lookup and freed with the
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from typing import Callable
 
 from PySide6.QtCore import QItemSelectionModel, Qt, QTimer, Signal
@@ -210,6 +211,7 @@ class VerseEditor(QWidget):
         self.ask_own = ask_own_text  # (tests put a stand-in here)
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setTextFormat(Qt.TextFormat.PlainText)  # typed words are shown as typed, never as HTML
 
         self.tree = _VerseTree()
         self.tree.setColumnCount(2)
@@ -238,6 +240,7 @@ class VerseEditor(QWidget):
             b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self.preview = QLabel()
         self.preview.setWordWrap(True)
+        self.preview.setTextFormat(Qt.TextFormat.PlainText)  # as on the desktop (drawText): "<b>" stays "<b>"
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.preview.setMinimumHeight(72)
         self.preview.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -322,7 +325,9 @@ class VerseEditor(QWidget):
 
     def set_list(self, verses: list[Verse], using_builtin: bool = False, note: str | None = None) -> None:
         """Show ``verses`` (e.g. after the file was edited outside); keeps the selection."""
-        selected = {v.key() for v in self._selected_verses()}
+        # by the exact entry, each once: typed words often share a source (same key()), and
+        # selecting all of them would make 삭제 remove entries the user never picked
+        picked = Counter((v.reference, v.text) for v in self._selected_verses())
         self.tree.clear()
         for v in verses:
             self.tree.addTopLevelItem(self._item(v))
@@ -331,7 +336,10 @@ class VerseEditor(QWidget):
             self.tree.setColumnWidth(0, 220)
         for i in range(self.tree.topLevelItemCount()):
             item = self.tree.topLevelItem(i)
-            item.setSelected(item.data(0, Qt.ItemDataRole.UserRole).key() in selected)
+            v = item.data(0, Qt.ItemDataRole.UserRole)
+            if picked[(v.reference, v.text)] > 0:
+                picked[(v.reference, v.text)] -= 1
+                item.setSelected(True)
         self._update_count()
         self._update_selection()
         if note:
@@ -443,11 +451,12 @@ class VerseEditor(QWidget):
                 duplicate_rows.append(keys[verse.key()])
                 problems.append(f"이미 목록에 있습니다: {verse.reference}")
                 continue
-            if len(keys) >= MAX_VERSES:
+            rows = self.tree.topLevelItemCount()  # (typed words may share a key: count rows)
+            if rows >= MAX_VERSES:
                 failed.append(typed)
                 problems.append(f"목록에는 {MAX_VERSES}개까지 넣을 수 있습니다.")
                 continue
-            keys[verse.key()] = len(keys)
+            keys[verse.key()] = rows
             added.append(verse)
             if ref.note:  # Korean numbering differs from the BSB here (e.g. 고후 13:13 = 13:14)
                 notes.append(f"{verse.reference} = {ref.note}")
