@@ -217,7 +217,10 @@
   - CI `check_show_desktop_log`: 실제 Win+D 줄에 최소화 집계·전경·커서·키, 돌아올 때 최소화 수가 줄고 위 창 ≥1(러너 콘솔은 미리
     최소화돼 있어서 "N minimised ≥ 1"만으로는 증명이 안 됨), ms 시간, 빠른 Win+D 10번 → 경고 1번 + 알림. Win+D가 안 먹는
     러너에서는 WARN(앱 잘못이 아님). 실행 37(c62ce86): 두 러너 157개 점검 통과 — 24H2는 'lowered by Explorer', windows-2022는
-    WorkerW가 떠 있는 채 'covered by TkTopLevel'로 돌아옴.
+    WorkerW가 떠 있는 채 'covered by TkTopLevel'로 돌아옴. 검토 반영 뒤 실행 38(992dbb9): 두 러너 159개, 실패 0·경고 0
+    (사용자에게 준 exe). 실제 줄 예: "desktop raised ... | foreground 'Progman'; cursor (864, 594) over 'SysListView32' in
+    'Progman'; held none, last input 16 ms ago; app windows: 2 minimised, 0 covered by the desktop, 0 above it; ..."
+  - 사용자에게 물어본 것(답 기다림): 작업 표시줄·시작 메뉴를 바꾸는 프로그램을 쓰는지, 그때 마우스였는지 터치패드였는지.
 
 ## 개발 메모 (다음 세션용)
 

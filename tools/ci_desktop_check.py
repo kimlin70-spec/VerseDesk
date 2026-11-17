@@ -1337,7 +1337,7 @@ def check_show_desktop_log(exe: Path, appdata: Path, report: Path) -> None:  # n
         press_win_d()
         time.sleep(3)
         if not expect("show desktop log: Win+D toggled back on this machine", not api.IsIconic(w),
-                      "the test window is still minimised", warn_only=True):
+                      f"test window minimised={bool(api.IsIconic(w))}", warn_only=True):
             return
         normal = [ln for ln in lines()[start:] if "desktop back to normal" in ln]
         down = normal[-1] if normal else ""
