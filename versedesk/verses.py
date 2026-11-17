@@ -6,6 +6,8 @@
   (트레이 → 말씀 목록 편집).  When it exists it replaces the built-in list completely.
 
 The verses are shown one after another in list order (see versedesk/rotation.py).
+Besides Bible verses the user can type their own words (말씀 목록 편집 → 직접 입력): any
+text, with line breaks if they like, and an optional source line.
 
 File format (UTF-8; a bare list is also accepted; other keys are ignored):
 
@@ -78,6 +80,33 @@ def _clean(value: Any, limit: int) -> str | None:
     return text[:limit] if text else None
 
 
+def clean_text(value: Any) -> str | None:
+    """The text as it is shown (not yet shortened): line breaks are kept (any kind of line
+    end), spaces inside each line are tidied, empty lines at the start and the end are
+    dropped and several empty lines in a row become one. None when nothing is left."""
+    if not isinstance(value, str):
+        return None
+    lines: list[str] = []
+    for line in value.splitlines():
+        line = " ".join(line.split())
+        if line or (lines and lines[-1]):
+            lines.append(line)
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines) or None
+
+
+def clean_reference(value: Any) -> str:
+    """A reference or source line as stored: one line, at most MAX_REFERENCE_CHARS."""
+    return _clean(value, MAX_REFERENCE_CHARS) or ""
+
+
+def is_bible_verse(v: "Verse") -> bool:
+    """Looked up in the built-in BSB (its text stays exactly as published), as opposed to
+    words the user typed in themselves."""
+    return v.reference.rstrip().endswith("(BSB)")
+
+
 def parse_list(data: Any, source: str) -> VerseFile:
     """Parsed JSON -> the verses in order. Invalid entries are skipped with a warning."""
     if isinstance(data, dict):
@@ -97,8 +126,8 @@ def parse_list(data: Any, source: str) -> VerseFile:
             out.warnings.append(f"entry #{i}: not an object, skipped")
             out.skipped += 1
             continue
-        text = _clean(item.get("text"), MAX_TEXT_CHARS)
-        if text is None:
+        full = clean_text(item.get("text"))
+        if full is None:
             out.warnings.append(f"entry #{i}: missing \"text\", skipped")
             out.skipped += 1
             continue
@@ -106,10 +135,12 @@ def parse_list(data: Any, source: str) -> VerseFile:
             out.warnings.append(f"only the first {MAX_VERSES} verses are used")
             out.skipped += len(items) - i + 1
             break
-        if len(text) == MAX_TEXT_CHARS and len(" ".join(str(item.get("text")).split())) > MAX_TEXT_CHARS:
+        text = full
+        if len(full) > MAX_TEXT_CHARS:
+            text = full[:MAX_TEXT_CHARS].rstrip()
             out.warnings.append(f"entry #{i}: text longer than {MAX_TEXT_CHARS} characters was cut")
             out.cut += 1
-        out.verses.append(Verse(_clean(item.get("reference"), MAX_REFERENCE_CHARS) or "", text, source))
+        out.verses.append(Verse(clean_reference(item.get("reference")), text, source))
     return out
 
 

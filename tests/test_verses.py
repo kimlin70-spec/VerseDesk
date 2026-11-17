@@ -30,7 +30,7 @@ def test_invalid_entries_are_skipped_with_warnings():
     ]}
     r = parse_list(data, "user")
     assert len(r.warnings) == 4 and r.error is None
-    assert r.verses[0] == Verse("", "Bad reference is dropped, text kept.", "user")
+    assert r.verses[0] == Verse("", "Bad reference is dropped,\ntext kept.", "user")  # (line breaks are kept)
     assert len(r.verses[1].text) == 3000 and "was cut" in r.warnings[-1]
     assert (r.skipped, r.cut) == (3, 1)
 
@@ -113,3 +113,35 @@ def test_same_verse_is_recognised_however_the_reference_is_written():
     assert a.key() == Verse("john 3:16-17", "y").key() == Verse("John  3:16 - 17 (KJV)", "z").key()
     assert a.key() != Verse("John 3:16", "x").key()
     assert Verse("", "Same  text").key() == Verse("", "same text").key()
+
+
+def test_typed_line_breaks_are_kept_and_tidied():
+    """Words the user types in (직접 입력) keep their line breaks; everything else is tidied."""
+    from versedesk.verses import clean_text
+
+    assert clean_text("  첫째   줄 \r\n둘째\t줄  ") == "첫째 줄\n둘째 줄"
+    assert clean_text("\n\n위\n\n\n\n아래\n\n") == "위\n\n아래"  # empty lines at the ends go, a run becomes one
+    assert clean_text("a b\rc") == "a\nb\nc"  # any kind of line end
+    assert clean_text(" \n \t\n") is None and clean_text(5) is None
+    r = parse_list([{"text": "Line one\r\nLine two", "reference": "  어머니\n말씀 "}], "user")
+    assert r.verses == [Verse("어머니 말씀", "Line one\nLine two", "user")]  # the source stays one line
+
+
+def test_a_long_typed_text_is_cut_and_reported_once():
+    r = parse_list([{"text": ("가" * 100 + "\n") * 40}], "user")
+    assert len(r.verses[0].text) <= 3000 and r.cut == 1 and not r.verses[0].text.endswith("\n")
+
+
+def test_bible_verses_are_told_from_typed_words():
+    from versedesk.verses import is_bible_verse
+
+    assert is_bible_verse(Verse("John 3:16 (BSB)", "For God so loved the world"))
+    assert not is_bible_verse(Verse("어머니 말씀", "오늘도 감사"))
+    assert not is_bible_verse(Verse("", "출처 없는 문구"))
+
+
+def test_typed_words_survive_the_saved_file(tmp_path):
+    verses = [Verse("", "첫째 줄\n둘째 줄", "user"), Verse("C. S. Lewis", "Words.", "user")]
+    p = tmp_path / "verses.json"
+    p.write_text(list_document(verses), encoding="utf-8")
+    assert load_verse_file(p, "user").verses == verses

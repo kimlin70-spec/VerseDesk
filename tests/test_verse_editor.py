@@ -255,3 +255,124 @@ def test_deleting_or_moving_does_not_make_a_scrolled_list_jump(qapp):
     qapp.processEvents()
     assert bar.value() == top
     ed.close()
+
+
+# ---------------------------------------------------------------------- words typed in (직접 입력)
+
+def _answer(*answers):
+    """Stand-in for the 직접 입력 dialog: returns the given (text, source) answers in turn."""
+    asked = []
+
+    def ask(parent, *, title, ok_text, text="", source=""):
+        asked.append({"title": title, "ok": ok_text, "text": text, "source": source})
+        return answers[len(asked) - 1]
+
+    ask.asked = asked
+    return ask
+
+
+def test_own_words_are_added_at_the_end_and_saved(editor):
+    editor.ask_own = _answer(("오늘도 감사합니다\n작은 일에도", "어머니 말씀"))
+    editor.own_button.click()
+    v = editor.verses()[-1]
+    assert (v.reference, v.text, v.source) == ("어머니 말씀", "오늘도 감사합니다\n작은 일에도", "user")
+    assert editor.saved[-1][-1] == v
+    row = editor.tree.topLevelItem(editor.tree.topLevelItemCount() - 1)
+    assert row.text(1) == "오늘도 감사합니다 / 작은 일에도"  # one line in the list...
+    assert row.isSelected() and "오늘도 감사합니다\n작은 일에도" in editor.preview.text()  # ...all of it below
+    assert "추가했습니다" in editor.message.text()
+    assert editor.ask_own.asked[0]["title"] == "직접 입력" and editor.ask_own.asked[0]["ok"] == "추가"
+
+
+def test_own_words_without_a_source(editor):
+    editor.ask_own = _answer(("Be still.", ""))
+    editor.own_button.click()
+    assert editor.verses()[-1] == Verse("", "Be still.", "user")
+    assert editor.tree.topLevelItem(editor.tree.topLevelItemCount() - 1).text(0) == "(출처 없음)"
+    assert editor.preview.text() == "Be still."
+
+
+def test_cancelling_or_the_same_words_twice_change_nothing(editor):
+    editor.ask_own = _answer(None, ("Same words.", "Me"), ("Same words.", "Me"))
+    editor.own_button.click()
+    assert len(editor.verses()) == 3 and editor.saved == []
+    editor.own_button.click()
+    editor.own_button.click()
+    assert [v.text for v in editor.verses()].count("Same words.") == 1 and len(editor.saved) == 1
+    assert "이미 목록에 있습니다" in editor.message.text()
+
+
+def test_own_words_can_be_changed_with_the_button_or_a_double_click(editor):
+    editor.ask_own = _answer(("Frist try.", "Me"), ("First try.", "Me"), ("First try.\nSecond line.", ""))
+    editor.own_button.click()
+    row = editor.tree.topLevelItemCount() - 1
+    assert editor.edit_button.isEnabled()
+    editor.edit_button.click()
+    assert editor.ask_own.asked[1] == {"title": "문구 고치기", "ok": "저장", "text": "Frist try.", "source": "Me"}
+    assert editor.verses()[row] == Verse("Me", "First try.", "user") and len(editor.verses()) == 4
+    item = editor.tree.topLevelItem(row)
+    editor.tree.itemDoubleClicked.emit(item, 1)
+    assert editor.verses()[row] == Verse("", "First try.\nSecond line.", "user")
+    assert editor.saved[-1][row].text == "First try.\nSecond line." and "고쳤습니다" in editor.message.text()
+
+
+def test_bible_verses_are_not_edited(editor):
+    editor.ask_own = _answer(("should not be asked", ""))
+    editor._select_rows([0])
+    assert not editor.edit_button.isEnabled()
+    editor.tree.itemDoubleClicked.emit(editor.tree.topLevelItem(0), 1)
+    assert editor.ask_own.asked == [] and editor.saved == []
+    assert "원문 그대로" in editor.message.text()
+
+
+def test_an_entry_changed_outside_meanwhile_is_not_overwritten(editor):
+    """verses.json edited outside while the dialog was open: the list is reloaded under it."""
+    editor.ask_own = _answer(("Mine.", ""))
+    editor.own_button.click()
+    mine = editor.verses()[-1]
+
+    def reload_then_answer(parent, **kw):
+        editor.set_list(_list(2))  # the file changed: 'Mine.' is gone
+        return ("Changed.", "")
+
+    editor.ask_own = reload_then_answer
+    editor.edit_selected()
+    assert mine not in editor.verses() and Verse("", "Changed.", "user") not in editor.verses()
+    assert "다시 해 주세요" in editor.message.text()
+
+
+def test_the_dialog_needs_some_words_and_keeps_line_breaks(qapp):
+    from versedesk.ui.verse_editor import OwnTextDialog
+
+    host = VerseEditor(_list(), 120, load_bible=_bible)
+    dlg = OwnTextDialog(host, title="직접 입력", ok_text="추가")
+    assert not dlg.ok_button.isEnabled()  # nothing typed yet
+    dlg.text_box.setPlainText("  \n ")
+    assert not dlg.ok_button.isEnabled()
+    dlg.text_box.setPlainText("  첫째 줄 \n\n\n둘째 줄  ")
+    dlg.source_box.setText("  어머니  말씀 ")
+    assert dlg.ok_button.isEnabled() and (dlg.text(), dlg.source()) == ("첫째 줄\n\n둘째 줄", "어머니 말씀")
+    dlg.text_box.setPlainText("가" * 3001)
+    assert not dlg.ok_button.isEnabled() and "3000자까지" in dlg.note.text()
+    assert dlg.text_box.tabChangesFocus() and dlg.source_box.maxLength() == 120
+    dlg.deleteLater()
+    host.close()
+
+
+def test_the_dialog_returns_what_was_typed(qapp, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from versedesk.ui import verse_editor
+
+    host = VerseEditor(_list(), 120, load_bible=_bible)
+
+    def fake_exec(self):
+        self.text_box.setPlainText("Line one\nLine two")
+        self.source_box.setText("CI")
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(verse_editor.OwnTextDialog, "exec", fake_exec)
+    assert verse_editor.ask_own_text(host, title="직접 입력", ok_text="추가") == ("Line one\nLine two", "CI")
+    monkeypatch.setattr(verse_editor.OwnTextDialog, "exec", lambda self: QDialog.DialogCode.Rejected)
+    assert verse_editor.ask_own_text(host, title="직접 입력", ok_text="추가") is None
+    host.close()

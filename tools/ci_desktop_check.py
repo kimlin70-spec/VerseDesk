@@ -129,6 +129,8 @@ class INPUT(ctypes.Structure):
 
 user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.GetClientRect.restype = wintypes.BOOL
 user32.ClientToScreen.restype = wintypes.BOOL
 user32.IsZoomed.argtypes = [wintypes.HWND]
 user32.IsZoomed.restype = wintypes.BOOL
@@ -693,6 +695,10 @@ def check_zones(exe: Path, appdata: Path, report: Path) -> None:
 EDITOR_TITLE = "VerseDesk 말씀 목록"
 EDITOR_TYPED = "요 8:12"  # John 8:12: not in the built-in list, typed in Korean
 EDITOR_EXPECT = "John 8:12 (BSB)"
+OWN_TITLE = "직접 입력"
+OWN_TEXT = ("Line one", "둘째 줄")  # typed with Enter between them: a line break on the desktop
+OWN_SOURCE = "CI 출처"
+VK_TAB = 0x09
 
 
 def saved_verse_list(appdata: Path) -> list:
@@ -716,7 +722,7 @@ def check_verse_editor(exe: Path, appdata: Path, report: Path) -> None:
         record("verse editor: test reference is new", "FAIL", f"{EDITOR_EXPECT} is already in the built-in list")
         return
     (appdata / "verses.json").unlink(missing_ok=True)
-    proc = subprocess.Popen([str(exe), "--open-verse-editor", "--exit-after", "60"])
+    proc = start_app(exe, appdata, "--open-verse-editor", cap=180)
     try:
         editor = find_window(EDITOR_TITLE, 60)
         if not expect("verse editor: the window opens", bool(editor)):
@@ -751,18 +757,52 @@ def check_verse_editor(exe: Path, appdata: Path, report: Path) -> None:
         expect("verse editor: the rest of the list is kept, in order",
                [v.get("reference") for v in saved[:-1]] == [v.reference for v in builtin],
                f"{len(saved)} saved, {len(builtin)} built in")
+
+        # 직접 입력…: the button at the right end of the top row opens a small window; two typed
+        # lines (Enter between them) and a source (Tab, then Enter) are saved as they are
+        rect = wintypes.RECT()
+        user32.GetClientRect(editor, ctypes.byref(rect))
+        click(point.x + rect.right - 50, point.y + 22)
+        own = find_window(OWN_TITLE, 10)
+        if expect("verse editor: 직접 입력… opens its small window", bool(own)):
+            time.sleep(0.5)
+            type_text(OWN_TEXT[0])
+            press_key(VK_RETURN)
+            type_text(OWN_TEXT[1])
+            press_key(VK_TAB)
+            type_text(OWN_SOURCE)
+            press_key(VK_RETURN)
+            saved = wait_for(lambda: (lambda s: s if len(s) > len(builtin) + 1 else None)(saved_verse_list(appdata)),
+                             timeout=10) or []
+            last = saved[-1] if saved else {}
+            expect("verse editor: typed words are saved with their line break and source",
+                   last == {"reference": OWN_SOURCE, "text": "\n".join(OWN_TEXT)}, f"last={last}")
+            expect("verse editor: ...and the small window has closed", not api.IsWindowVisible(own))
+            screenshot(report, "07b-own-words")
         user32.PostMessageW(editor, 0x0010, 0, 0)  # WM_CLOSE: like the window's X button
         closed = wait_for(lambda: not api.IsWindow(editor) or not api.IsWindowVisible(editor), timeout=10)
         expect("verse editor: closes with its X button", bool(closed))
         time.sleep(2)
         expect("verse editor: closing it leaves VerseDesk running", proc.poll() is None)
+
+        # A typed line break is a line break on the desktop: a list holding only one entry
+        # (written as another program would; the app reloads it) is shown at once.
+        def shown_height(text: str) -> int:
+            (appdata / "verses.json").write_text(
+                json.dumps({"verses": [{"reference": "", "text": text}]}, ensure_ascii=False), encoding="utf-8")
+            time.sleep(4)
+            w = find_window(VERSE_TITLE, 5)
+            if not w:
+                return 0
+            l, t, r, b = api.window_rect(w)
+            return b - t
+
+        one, two = shown_height("Line one Line two"), shown_height("Line one\nLine two")
+        expect("verse editor: a typed line break shows as a second line on the desktop", 0 < one < two,
+               f"one line: {one} px, two lines: {two} px")
     finally:
-        try:
-            code = proc.wait(timeout=120)
-        except subprocess.TimeoutExpired:
-            kill_tree(proc.pid)
-            code = None
-        expect("verse editor: the app quits cleanly", code == 0, f"exit code {code}")
+        end_app(proc, appdata, "verse editor: the app quits cleanly")
+        (appdata / "verses.json").unlink(missing_ok=True)  # later checks start from the built-in list
 
 
 # ----------------------------------------------------------------------------- explorer window slot

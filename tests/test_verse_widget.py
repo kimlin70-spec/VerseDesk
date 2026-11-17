@@ -44,3 +44,16 @@ def test_a_click_outside_edit_mode_is_reported_as_stray(qapp):
     QTest.mouseClick(w, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(10, 10))
     assert len(seen) == 1 and len(moved) == 1  # in edit mode a click is a (zero-length) drag
     w.deleteLater()
+
+
+def test_typed_line_breaks_are_shown_and_a_missing_source_leaves_no_gap(qapp):
+    from versedesk.ui.verse_widget import VerseWidget
+
+    w = VerseWidget()
+    w.set_verse("Short words", "")
+    one_line = w.height()
+    w.set_verse("Short\nwords", "")
+    assert w.height() > one_line  # two lines
+    w.set_verse("Short words", "Source")
+    assert w.height() > one_line  # the source line takes room only when there is one
+    w.deleteLater()

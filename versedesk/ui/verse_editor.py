@@ -2,6 +2,9 @@
 
 Type a reference ("요 3:16", "시 23:1-3", "John 3:16") and press Enter or 추가: the text is
 filled in from the BSB text built into the program (no typing, no typos, works offline).
+직접 입력… adds words the user types in (any language, line breaks kept, a source line if
+they like); 고치기 or a double-click changes such an entry. Bible verses are not edited: their
+text stays exactly as published.
 ▲/▼ (or dragging) changes the order, 삭제 removes, and the dropdown sets how often the next
 verse comes up.  Every change is saved at once, so there is no save button.
 
@@ -19,10 +22,12 @@ from PySide6.QtGui import QCursor, QFont, QGuiApplication, QIcon, QKeySequence, 
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -32,13 +37,29 @@ from PySide6.QtWidgets import (
 
 from versedesk.bible import Bible, BibleUnavailable, ReferenceProblem, parse_reference, split_references
 from versedesk.rotation import INTERVAL_CHOICES, interval_label
-from versedesk.verses import MAX_VERSES, Verse
+from versedesk.verses import (
+    MAX_REFERENCE_CHARS,
+    MAX_TEXT_CHARS,
+    MAX_VERSES,
+    Verse,
+    clean_reference,
+    clean_text,
+    is_bible_verse,
+)
 
 log = logging.getLogger("versedesk.ui.verse_editor")
 
 TITLE = "VerseDesk 말씀 목록"
 PLACEHOLDER = "예) 요 3:16, 시 23:1-3, John 3:16"
-HELP = "구절 주소를 적고 Enter를 누르면 영어 본문이 자동으로 들어갑니다. 여러 개는 쉼표(,)로 나눠 적으세요."
+HELP = ("구절 주소를 적고 Enter를 누르면 영어 본문이 자동으로 들어갑니다. 여러 개는 쉼표(,)로 나눠 적으세요. "
+        "다른 문구는 '직접 입력…'으로 넣을 수 있습니다.")
+OWN_TITLE_ADD = "직접 입력"
+OWN_TITLE_EDIT = "문구 고치기"
+OWN_TEXT_LABEL = "문구 (Enter로 줄을 바꿀 수 있습니다)"
+OWN_TEXT_PLACEHOLDER = "예) 오늘도 감사합니다"
+OWN_SOURCE_LABEL = "출처 (없어도 됩니다)"
+OWN_SOURCE_PLACEHOLDER = "예) 어머니 말씀"
+BIBLE_NOT_EDITABLE = "성경 구절은 원문 그대로 둡니다. 다른 문구는 '직접 입력…'으로 넣을 수 있습니다."
 PREVIEW_HINT = "목록에서 구절을 고르면 여기에 전체 본문이 보입니다."
 DEFAULT_SIZE = (640, 560)
 # text colours for a light window, and for Windows' dark app mode (readable on both)
@@ -82,6 +103,81 @@ class _VerseTree(QTreeWidget):
             pass
 
 
+class OwnTextDialog(QDialog):
+    """직접 입력 / 문구 고치기: the words and an optional source. Owned by the editor window
+    (a normal window, so this stays in front of it). OK is possible only with some text."""
+
+    def __init__(self, parent: QWidget, *, title: str, ok_text: str, text: str = "", source: str = ""):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setWindowModality(Qt.WindowModality.WindowModal)  # only the editor waits; zones stay usable
+        self.text_box = QPlainTextEdit()
+        self.text_box.setPlaceholderText(OWN_TEXT_PLACEHOLDER)
+        self.text_box.setTabChangesFocus(True)  # Tab goes on to the source box
+        self.text_box.setPlainText(text)
+        self.source_box = QLineEdit(source)
+        self.source_box.setPlaceholderText(OWN_SOURCE_PLACEHOLDER)
+        self.source_box.setMaxLength(MAX_REFERENCE_CHARS)
+        self.note = QLabel()
+        self.ok_button = QPushButton(ok_text)
+        self.ok_button.setDefault(True)  # Enter in the source box
+        cancel = QPushButton("취소")
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.note, 1)
+        buttons.addWidget(self.ok_button)
+        buttons.addWidget(cancel)
+        root = QVBoxLayout(self)
+        root.addWidget(QLabel(OWN_TEXT_LABEL))
+        root.addWidget(self.text_box, 1)
+        root.addWidget(QLabel(OWN_SOURCE_LABEL))
+        root.addWidget(self.source_box)
+        root.addLayout(buttons)
+        self.resize(460, 300)
+        self.text_box.textChanged.connect(self._check)
+        self.ok_button.clicked.connect(self.accept)
+        cancel.clicked.connect(self.reject)
+        sc = QShortcut(QKeySequence("Ctrl+Return"), self)
+        sc.activated.connect(lambda: self.ok_button.isEnabled() and self.accept())
+        self._check()
+        self.text_box.setFocus()
+
+    def text(self) -> str | None:
+        return clean_text(self.text_box.toPlainText())
+
+    def source(self) -> str:
+        return clean_reference(self.source_box.text())
+
+    def _check(self) -> None:
+        text = self.text()
+        too_long = bool(text) and len(text) > MAX_TEXT_CHARS
+        self.ok_button.setEnabled(bool(text) and not too_long)
+        self.note.setText(f"{MAX_TEXT_CHARS}자까지 넣을 수 있습니다 (지금 {len(text)}자)" if too_long else "")
+
+    def accept(self) -> None:
+        if self.ok_button.isEnabled():
+            super().accept()
+
+
+def ask_own_text(parent: QWidget, *, title: str, ok_text: str, text: str = "", source: str = "") -> tuple[str, str] | None:
+    """(text, source) as the user typed them (tidied like the saved file), or None when cancelled."""
+    dlg = OwnTextDialog(parent, title=title, ok_text=ok_text, text=text, source=source)
+    try:
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        typed = dlg.text()
+        return (typed, dlg.source()) if typed else None
+    finally:
+        try:
+            dlg.deleteLater()
+        except RuntimeError:  # the editor (and with it the dialog) was closed meanwhile
+            pass
+
+
+def _list_text(text: str) -> str:
+    """One line for the list: line breaks shown as ' / ' (the whole text is in the preview)."""
+    return " / ".join(line for line in text.splitlines() if line)
+
+
 class VerseEditor(QWidget):
     list_changed = Signal(list)  # list[Verse], in order: save and show it
     interval_changed = Signal(int)  # minutes
@@ -109,6 +205,9 @@ class VerseEditor(QWidget):
         self.input.setPlaceholderText(PLACEHOLDER)
         self.input.setClearButtonEnabled(True)
         self.add_button = QPushButton("추가")
+        self.own_button = QPushButton("직접 입력…")
+        self.own_button.setToolTip("성경 구절이 아닌 문구를 직접 적어 넣습니다")
+        self.ask_own = ask_own_text  # (tests put a stand-in here)
         self.message = QLabel()
         self.message.setWordWrap(True)
 
@@ -129,8 +228,10 @@ class VerseEditor(QWidget):
 
         self.up_button = QPushButton("▲ 위로")
         self.down_button = QPushButton("▼ 아래로")
+        self.edit_button = QPushButton("고치기")
+        self.edit_button.setToolTip("직접 입력한 문구를 고칩니다 (두 번 클릭해도 됩니다)")
         self.delete_button = QPushButton("삭제")
-        for b in (self.up_button, self.down_button, self.delete_button):
+        for b in (self.up_button, self.down_button, self.edit_button, self.delete_button):
             # a click must leave the keyboard in the list: a focused button that gets disabled
             # (top/bottom reached) would hand the focus to the interval dropdown, where the
             # arrow keys would silently change the interval
@@ -156,8 +257,9 @@ class VerseEditor(QWidget):
         top.addWidget(QLabel("구절 주소"))
         top.addWidget(self.input, 1)
         top.addWidget(self.add_button)
+        top.addWidget(self.own_button)
         side = QVBoxLayout()
-        for b in (self.up_button, self.down_button, self.delete_button):
+        for b in (self.up_button, self.down_button, self.edit_button, self.delete_button):
             side.addWidget(b)
         side.addStretch(1)
         middle = QHBoxLayout()
@@ -180,6 +282,9 @@ class VerseEditor(QWidget):
 
         self.input.returnPressed.connect(self.add_from_input)
         self.add_button.clicked.connect(self.add_from_input)
+        self.own_button.clicked.connect(self.add_own)
+        self.edit_button.clicked.connect(self.edit_selected)
+        self.tree.itemDoubleClicked.connect(lambda *_a: self.edit_selected())
         self.up_button.clicked.connect(lambda: self.move_selected(-1))
         self.down_button.clicked.connect(lambda: self.move_selected(1))
         self.delete_button.clicked.connect(self.delete_selected)
@@ -238,7 +343,7 @@ class VerseEditor(QWidget):
 
     @staticmethod
     def _item(v: Verse) -> QTreeWidgetItem:
-        item = QTreeWidgetItem([v.reference or "(출처 없음)", v.text])
+        item = QTreeWidgetItem([v.reference or "(출처 없음)", _list_text(v.text)])
         item.setData(0, Qt.ItemDataRole.UserRole, v)
         item.setToolTip(0, v.reference)
         # rows can be dragged between other rows but never dropped *onto* one (no nesting)
@@ -280,6 +385,7 @@ class VerseEditor(QWidget):
     def _update_selection(self) -> None:
         verses = self._selected_verses()
         self.delete_button.setEnabled(bool(verses))
+        self.edit_button.setEnabled(len(verses) == 1 and not is_bible_verse(verses[0]))
         self.up_button.setEnabled(bool(verses) and self._selected_rows() != list(range(len(verses))))
         n = self.tree.topLevelItemCount()
         self.down_button.setEnabled(bool(verses) and self._selected_rows() != list(range(n - len(verses), n)))
@@ -362,6 +468,56 @@ class VerseEditor(QWidget):
             self._say(f"{len(added)}개를 추가했습니다{extra}. " + " / ".join(problems), "error")
         else:
             self._say(" / ".join(problems), "error")
+
+    def add_own(self) -> None:
+        """직접 입력…: words the user types in, added at the end of the list."""
+        got = self.ask_own(self, title=OWN_TITLE_ADD, ok_text="추가")
+        if got is None:
+            return
+        verse = Verse(got[1], got[0], "user")
+        rows = self.verses()
+        same = [i for i, v in enumerate(rows) if (v.text, v.reference) == (verse.text, verse.reference)]
+        if same:
+            self._select_rows(same)
+            self._say("이미 목록에 있습니다.", "error")
+            return
+        if len(rows) >= MAX_VERSES:
+            self._say(f"목록에는 {MAX_VERSES}개까지 넣을 수 있습니다.", "error")
+            return
+        self.tree.addTopLevelItem(self._item(verse))
+        self._select_rows([self.tree.topLevelItemCount() - 1])
+        self._changed()
+        self._say("추가했습니다: " + _list_text(verse.text)[:30], "ok")
+        self.tree.setFocus()
+
+    def edit_selected(self) -> None:
+        """고치기 / double-click: change the words of an entry the user typed in."""
+        rows = self._selected_rows()
+        if len(rows) != 1:
+            return
+        old = self.tree.topLevelItem(rows[0]).data(0, Qt.ItemDataRole.UserRole)
+        if is_bible_verse(old):
+            self._say(BIBLE_NOT_EDITABLE, "hint")
+            return
+        got = self.ask_own(self, title=OWN_TITLE_EDIT, ok_text="저장", text=old.text, source=old.reference)
+        if got is None:
+            return
+        new = Verse(got[1], got[0], "user")
+        if (new.text, new.reference) == (old.text, old.reference):
+            return
+        items = [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
+        # the list may have been reloaded meanwhile (verses.json changed outside): find the entry again
+        at = rows[0] if rows[0] < len(items) and items[rows[0]].data(0, Qt.ItemDataRole.UserRole) == old else next(
+            (i for i, item in enumerate(items) if item.data(0, Qt.ItemDataRole.UserRole) == old), -1)
+        if at < 0:
+            self._say("그사이 목록이 바뀌어서 고치지 못했습니다. 다시 해 주세요.", "error")
+            return
+        items[at] = self._item(new)
+        self._rebuild(items)
+        self._select_rows([at])
+        self._changed()
+        self._say("고쳤습니다.", "ok")
+        self.tree.setFocus()
 
     def _rebuild(self, items: list[QTreeWidgetItem]) -> None:
         """Replace the rows without a flurry of selection changes in between, and without
