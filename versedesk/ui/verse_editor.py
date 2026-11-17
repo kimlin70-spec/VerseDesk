@@ -56,10 +56,10 @@ HELP = ("구절 주소를 적고 Enter를 누르면 영어 본문이 자동으�
         "다른 문구는 '직접 입력…'으로 넣을 수 있습니다.")
 OWN_TITLE_ADD = "직접 입력"
 OWN_TITLE_EDIT = "문구 고치기"
-OWN_TEXT_LABEL = "문구 (Enter로 줄을 바꿀 수 있습니다)"
-OWN_TEXT_PLACEHOLDER = "예) 오늘도 감사합니다"
-OWN_SOURCE_LABEL = "출처 (없어도 됩니다)"
-OWN_SOURCE_PLACEHOLDER = "예) 어머니 말씀"
+OWN_TEXT_LABEL = "문구"
+OWN_TEXT_PLACEHOLDER = "말씀을 입력해주세요"
+OWN_SOURCE_LABEL = "출처"
+OWN_SOURCE_PLACEHOLDER = "출처를 입력해주세요.(생략가능)"
 BIBLE_NOT_EDITABLE = "성경 구절은 원문 그대로 둡니다. 다른 문구는 '직접 입력…'으로 넣을 수 있습니다."
 PREVIEW_HINT = "목록에서 구절을 고르면 여기에 전체 본문이 보입니다."
 DEFAULT_SIZE = (640, 560)
